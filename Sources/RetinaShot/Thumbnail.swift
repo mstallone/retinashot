@@ -1,6 +1,6 @@
 import AppKit
 
-/// The floating preview that slides in at the bottom-right after a capture, like the built-in one.
+/// The floating preview that rises into the bottom-right of the captured display after a capture.
 /// Click opens the file, drag carries it into another app, hovering keeps it around.
 final class ThumbnailPanel: NSPanel {
     private static let maxSize = NSSize(width: 220, height: 150)
@@ -14,8 +14,10 @@ final class ThumbnailPanel: NSPanel {
         let size = NSSize(width: max(shot.image.size.width * fit, 1).rounded(), height: max(shot.image.size.height * fit, 1).rounded())
         let visible = screen.visibleFrame
         restingOrigin = NSPoint(x: visible.maxX - size.width - Self.margin, y: visible.minY + Self.margin)
-        let offscreen = NSPoint(x: visible.maxX + 8, y: restingOrigin.y)
-        super.init(contentRect: NSRect(origin: offscreen, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        // Starts slightly below its resting spot and rises in. Staying inside this display matters: an
+        // off-screen start would land on whichever monitor sits to the right.
+        let start = NSPoint(x: restingOrigin.x, y: restingOrigin.y - 12)
+        super.init(contentRect: NSRect(origin: start, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
@@ -42,7 +44,7 @@ final class ThumbnailPanel: NSPanel {
             context.duration = 0.28
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             animator().alphaValue = 1
-            animator().setFrameOrigin(restingOrigin)
+            animator().setFrame(NSRect(origin: restingOrigin, size: frame.size), display: true)
         }
         scheduleDismissal(after: Self.lifetime)
     }
@@ -53,7 +55,7 @@ final class ThumbnailPanel: NSPanel {
             context.duration = 0.22
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             animator().alphaValue = 0
-            animator().setFrameOrigin(NSPoint(x: frame.minX + 24, y: frame.minY))
+            animator().setFrame(frame.offsetBy(dx: 0, dy: -12), display: true)
         }, completionHandler: { [weak self] in MainActor.assumeIsolated { self?.orderOut(nil) } })
     }
 
