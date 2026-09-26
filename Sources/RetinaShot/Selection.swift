@@ -6,7 +6,7 @@ import Carbon.HIToolbox
 /// Space while dragging moves the selection, Shift locks an axis, Option resizes from the center.
 @MainActor
 final class SelectionSession {
-    enum Outcome { case selected(CGRect), window, cancelled }
+    enum Outcome { case selected(CGRect, on: NSScreen), window, cancelled }
 
     private let hotKeys: HotKeys
     private let completion: (Outcome) -> Void
@@ -20,7 +20,7 @@ final class SelectionSession {
         for screen in NSScreen.screens {
             let panel = OverlayPanel(screen: screen)
             panel.selectionView.onFinish = { [weak self, unowned panel] rect in
-                self?.finish(rect.map { .selected(Self.globalRect(panel.convertToScreen($0))) } ?? .cancelled)
+                self?.finish(rect.map { .selected(Self.globalRect(panel.convertToScreen($0)), on: panel.display) } ?? .cancelled)
             }
             panels.append(panel)
         }
@@ -64,8 +64,10 @@ final class SelectionSession {
 
 final class OverlayPanel: NSPanel {
     let selectionView: SelectionView
+    let display: NSScreen
 
     init(screen: NSScreen) {
+        display = screen
         selectionView = SelectionView(frame: NSRect(origin: .zero, size: screen.frame.size))
         super.init(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         level = .screenSaver

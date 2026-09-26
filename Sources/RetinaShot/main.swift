@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import ScreenCaptureKit
 import ServiceManagement
 
 let appName = "RetinaShot"
@@ -13,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var session: SelectionSession?
     private var thumbnail: ThumbnailPanel?
     private var isCapturing = false
+    private var prefetchedContent: SCShareableContent?
     private var permissionWatch: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -66,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func captureSelection() { afterMenuCloses { self.beginSelection() } }
-    @objc private func captureWindow() { afterMenuCloses { self.capture { await Capture.window(preferences: self.preferences) } } }
+    @objc private func captureWindow() { afterMenuCloses { self.capture(on: nil) { await Capture.window(preferences: self.preferences) } } }
     @objc private func toggleThumbnail() { preferences.showsThumbnail.toggle() }
     @objc private func toggleLogin() {
         do { try SMAppService.mainApp.status == .enabled ? SMAppService.mainApp.unregister() : SMAppService.mainApp.register() }
@@ -90,34 +92,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard session == nil, !isCapturing else { return }
         guard ScreenRecording.isGranted else { explainPermission(); return }
         thumbnail?.dismiss()
-        let content = Task { try await Capture.shareableContent() } // starts now so the grab is instant on mouse-up
+        prefetchedContent = nil
+        let prefetch = Task { prefetchedContent = try? await Capture.shareableContent() } // so the grab is instant on mouse-up
         session = SelectionSession(hotKeys: hotKeys) { [weak self] outcome in
             guard let self = self else { return }
             self.session = nil
             switch outcome {
             case .cancelled:
-                content.cancel()
+                prefetch.cancel()
             case .window:
-                content.cancel()
-                self.capture { await Capture.window(preferences: self.preferences) }
-            case .selected(let rect):
-                self.capture {
-                    let shareable = try await content.value
+                prefetch.cancel()
+                self.capture(on: nil) { await Capture.window(preferences: self.preferences) }
+            case .selected(let rect, let screen):
+                self.capture(on: screen) {
+                    await prefetch.value
+                    let content: SCShareableContent
+                    if let prefetched = self.prefetchedContent { content = prefetched } else { content = try await Capture.shareableContent() }
                     try await Task.sleep(nanoseconds: 30_000_000) // one frame for the overlay to leave the screen
-                    return try await Capture.selection(rect, content: shareable, preferences: self.preferences)
+                    return try await Capture.selection(rect, content: content, preferences: self.preferences)
                 }
             }
         }
     }
 
-    private func capture(_ work: @escaping () async throws -> Screenshot?) {
+    /// Runs a capture, then shows the thumbnail on `screen` (the display captured) or, for window
+    /// captures, on the display under the pointer.
+    private func capture(on screen: NSScreen?, _ work: @escaping @MainActor () async throws -> Screenshot?) {
         isCapturing = true
         Task {
             defer { isCapturing = false }
             do {
                 guard let shot = try await work() else { return }
                 guard preferences.showsThumbnail,
-                      let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main
+                      let screen = screen ?? NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main
                 else { return }
                 thumbnail?.dismiss()
                 thumbnail = ThumbnailPanel(shot, on: screen)

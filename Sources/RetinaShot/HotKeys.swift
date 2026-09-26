@@ -1,8 +1,9 @@
 import Carbon.HIToolbox
 
 /// System-wide hot keys through Carbon. Works from a background app and needs no Accessibility permission.
+@MainActor
 final class HotKeys {
-    typealias Handler = (_ pressed: Bool) -> Void
+    typealias Handler = @MainActor (_ pressed: Bool) -> Void
     private static let signature = OSType(0x5253_4854) // 'RSHT'
     private var handlers: [UInt32: Handler] = [:]
     private var refs: [UInt32: EventHotKeyRef] = [:]
@@ -16,8 +17,10 @@ final class HotKeys {
             var id = EventHotKeyID()
             GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                               nil, MemoryLayout<EventHotKeyID>.size, nil, &id)
-            let hotKeys = Unmanaged<HotKeys>.fromOpaque(context!).takeUnretainedValue()
-            hotKeys.handlers[id.id]?(GetEventKind(event) == UInt32(kEventHotKeyPressed))
+            let pressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
+            MainActor.assumeIsolated { // Carbon delivers hot-key events on the main thread
+                Unmanaged<HotKeys>.fromOpaque(context!).takeUnretainedValue().handlers[id.id]?(pressed)
+            }
             return noErr
         }, kinds.count, &kinds, Unmanaged.passUnretained(self).toOpaque(), nil)
     }

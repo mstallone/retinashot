@@ -54,7 +54,7 @@ final class ThumbnailPanel: NSPanel {
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             animator().alphaValue = 0
             animator().setFrameOrigin(NSPoint(x: frame.minX + 24, y: frame.minY))
-        }, completionHandler: { [weak self] in self?.orderOut(nil) })
+        }, completionHandler: { [weak self] in MainActor.assumeIsolated { self?.orderOut(nil) } })
     }
 
     private func scheduleDismissal(after seconds: TimeInterval) {

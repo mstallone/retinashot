@@ -17,6 +17,7 @@ enum CaptureError: LocalizedError {
     }
 }
 
+@MainActor
 enum Capture {
     static func shareableContent() async throws -> SCShareableContent {
         try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)

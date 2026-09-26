@@ -9,4 +9,4 @@ disable() { # $1 = symbolic hot key id, $2 = modifier mask
 disable 30 1179648   # Shift-Cmd-4: save picture of selected area as a file
 disable 31 1441792   # Ctrl-Shift-Cmd-4: copy picture of selected area to the clipboard
 /System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings -u
-[[ "${1:-}" == "--shortcuts-only" ]] || echo "Built-in Shift-Cmd-4 shortcuts disabled."
+[[ "${1:-}" == "--quiet" ]] || echo "Built-in Shift-Cmd-4 shortcuts disabled."
