@@ -55,9 +55,9 @@ and `show-thumbnail`.
 ### Permission
 
 Every process that reads screen pixels needs Screen Recording; Apple's own shortcuts are exempt only
-because they run inside a system process. RetinaShot asks once, and its menu-bar icon is faded until
-the permission is granted. If the switch is on but captures fail, the stored entry no longer matches
-the app's signature: Option-click the menu-bar icon and choose Reset Screen Recording Permission.
+because they run inside a system process. RetinaShot asks once. If the switch is on but captures
+fail, the stored entry no longer matches the app's signature: Option-click the menu-bar icon and
+choose Reset Screen Recording Permission.
 
 ### Private calls
 

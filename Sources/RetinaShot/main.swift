@@ -10,7 +10,7 @@ let appName = "RetinaShot"
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotKeys = HotKeys()
     private let preferences = ScreenshotPreferences()
-    private var menu: MenuHub?
+    private var hub: MenuHub?
     private var session: SelectionSession?
     private var thumbnail: ThumbnailPanel?
     private var isCapturing = false
@@ -23,9 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
-        let icon = NSImage(systemSymbolName: "viewfinder.rectangular", accessibilityDescription: appName)
-            ?? NSImage(systemSymbolName: "viewfinder", accessibilityDescription: appName)!
-        menu = MenuHub(icon: icon) { self.section }
+        let icon = NSImage(systemSymbolName: "viewfinder.rectangular", accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: "viewfinder", accessibilityDescription: nil)!
+        hub = MenuHub(icon: icon) { self.section }
 
         for modifiers in [cmdKey | shiftKey, cmdKey | shiftKey | controlKey] {
             hotKeys.register(kVK_ANSI_4, modifiers: modifiers) { [weak self] pressed in if pressed { self?.beginSelection() } }
@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: Menu
 
-    /// Read each time the menu opens, so every state it shows is current.
+    /// This app's part of the menu, read again whenever it may be shown, so every state it shows is current.
     private var section: MenuSection {
         let granted = ScreenRecording.isGranted
         return MenuSection(items: [
@@ -122,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Permission
 
     private func explainPermission() {
+        hub?.update() // fades the icon, if the permission was just found missing
         ScreenRecording.request()
         let alert = NSAlert()
         alert.messageText = "\(appName) needs Screen Recording permission"
