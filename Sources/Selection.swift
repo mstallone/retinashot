@@ -172,7 +172,7 @@ final class SelectionView: NSView {
             anchor = NSPoint(x: r.maxX - 4, y: r.minY - 4)
         } else if let c = cursor {
             text = "\(Int(c.x)), \(Int(bounds.height - c.y))" as NSString
-            anchor = NSPoint(x: c.x + 14, y: c.y - 14)
+            anchor = NSPoint(x: c.x + 10, y: c.y - 10) // just clear of the crosshair's arms
         } else {
             return nil
         }
