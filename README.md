@@ -40,6 +40,7 @@ menu-bar icon and choose Reset Screen Recording Permission.
     Scripts/build-release.sh             CI: universal build, Developer ID, notarize, staple, zip
     Scripts/install-shortcuts.sh         hands Shift-Cmd-4 to RetinaShot
     Scripts/set-release-secrets.sh       one-time GitHub Actions secret setup
+    Tools/export-identity.swift          exports a signing identity from the keychain as .p12
 
 ## Local development
 
@@ -57,7 +58,9 @@ SHA-256 to a GitHub Release. `CFBundleVersion` is the commit count.
     git tag v1.2.0 && git push origin v1.2.0
 
 Required repository secrets (the same material as mx-master-input and runway), set once with
-`Scripts/set-release-secrets.sh <DeveloperID.p12> <AuthKey_XXXX.p8> <issuer-id>`:
+`Scripts/set-release-secrets.sh <issuer-id>`. It exports the Developer ID identity straight from
+your login keychain (macOS asks once to allow key access) and picks up the App Store Connect key
+from `~/.appstoreconnect/private_keys`; pass a `.p8` and `.p12` path to use other files.
 
 | Secret | What it is |
 |---|---|

@@ -1,20 +1,34 @@
 #!/bin/bash
 # One-time setup of the GitHub Actions secrets the Release workflow needs. Same names and material as
-# mx-master-input and runway. Run it from a Mac that has the NextByte Developer ID .p12 export.
-#   Scripts/set-release-secrets.sh <DeveloperID.p12> <AuthKey_XXXX.p8> <issuer-id>
-# You will be prompted for the .p12 password. Nothing is written to disk.
+# mx-master-input and runway.
+#   Scripts/set-release-secrets.sh <issuer-id> [AuthKey_XXXX.p8] [DeveloperID.p12]
+# With no .p12, the Developer ID identity is exported straight from your login keychain (macOS asks
+# once to allow access to the key) with a random password; nothing is left on disk afterwards.
 set -euo pipefail
-P12="${1:?path to the Developer ID Application .p12}"
-P8="${2:?path to the App Store Connect API key (.p8)}"
-ISSUER="${3:?App Store Connect issuer ID}"
-REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ISSUER="${1:?App Store Connect issuer ID}"
+P8="${2:-$(ls "$HOME"/.appstoreconnect/private_keys/AuthKey_*.p8 2>/dev/null | head -1)}"
+P12="${3:-}"
+IDENTITY_PREFIX="${DEVELOPER_ID_NAME:-Developer ID Application: NextByte}"
+REPO="$(git -C "$ROOT" remote get-url origin | sed -E 's#.*github\.com[:/]##; s#\.git$##')"
+
+[[ -f "$P8" ]] || { echo "App Store Connect API key not found; pass its path as the second argument" >&2; exit 1; }
 KEY_ID="$(basename "$P8" | sed -E 's/^AuthKey_([A-Z0-9]+)\.p8$/\1/')"
 [[ "$KEY_ID" != "$(basename "$P8")" ]] || { echo "the .p8 must be named AuthKey_<KEY_ID>.p8" >&2; exit 1; }
 
-read -r -s -p "Password for $(basename "$P12"): " P12_PASSWORD; echo
+TEMP="$(mktemp -d)"
+trap 'rm -rf "$TEMP"' EXIT
+if [[ -n "$P12" ]]; then
+  read -r -s -p "Password for $(basename "$P12"): " P12_PASSWORD; echo
+else
+  P12="$TEMP/developer-id.p12"
+  P12_PASSWORD="$(openssl rand -base64 24)"
+  swiftc -O "$ROOT/Tools/export-identity.swift" -o "$TEMP/export-identity"
+  "$TEMP/export-identity" "$IDENTITY_PREFIX" "$P12" "$P12_PASSWORD"
+fi
 openssl pkcs12 -in "$P12" -passin "pass:$P12_PASSWORD" -nokeys -legacy 2>/dev/null | grep -q 'Developer ID Application' \
   || openssl pkcs12 -in "$P12" -passin "pass:$P12_PASSWORD" -nokeys 2>/dev/null | grep -q 'Developer ID Application' \
-  || { echo "could not open the .p12 with that password, or it is not a Developer ID Application certificate" >&2; exit 1; }
+  || { echo "the .p12 could not be opened or is not a Developer ID Application certificate" >&2; exit 1; }
 
 base64 -i "$P12" | gh secret set DEVELOPER_ID_CERTIFICATE_BASE64 --repo "$REPO"
 printf '%s' "$P12_PASSWORD" | gh secret set DEVELOPER_ID_CERTIFICATE_PASSWORD --repo "$REPO"
