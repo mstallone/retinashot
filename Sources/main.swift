@@ -21,8 +21,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSApp.terminate(nil)
             return
         }
-        enableCursorChangesInBackground()
-
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "viewfinder.rectangular", accessibilityDescription: appName)
             ?? NSImage(systemSymbolName: "viewfinder", accessibilityDescription: appName)

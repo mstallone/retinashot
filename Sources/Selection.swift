@@ -32,7 +32,7 @@ final class SelectionSession {
         // The pointer resets as the panels appear, so assert the crosshair over the first moments.
         for delay in [0, 0.05, 0.2] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                if self?.finished == false { NSCursor.crosshair.set() }
+                if self?.finished == false { showCrosshairInBackground() }
             }
         }
     }
@@ -102,10 +102,10 @@ final class SelectionView: NSView {
 
     // MARK: Mouse
 
-    override func cursorUpdate(with event: NSEvent) { NSCursor.crosshair.set() }
-    override func mouseEntered(with event: NSEvent) { NSCursor.crosshair.set(); track(event) }
+    override func cursorUpdate(with event: NSEvent) { showCrosshairInBackground() }
+    override func mouseEntered(with event: NSEvent) { showCrosshairInBackground(); track(event) }
     override func mouseExited(with event: NSEvent) { if !isDragging { cursor = nil; redraw() } }
-    override func mouseMoved(with event: NSEvent) { NSCursor.crosshair.set(); track(event) }
+    override func mouseMoved(with event: NSEvent) { showCrosshairInBackground(); track(event) }
 
     override func mouseDown(with event: NSEvent) {
         isDragging = true
@@ -114,7 +114,7 @@ final class SelectionView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        NSCursor.crosshair.set()
+        showCrosshairInBackground()
         let point = location(event)
         if isMoving, let a = anchor, let c = cursor {
             anchor = NSPoint(x: a.x + point.x - c.x, y: a.y + point.y - c.y)

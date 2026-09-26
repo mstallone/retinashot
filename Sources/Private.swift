@@ -1,5 +1,5 @@
+import AppKit
 import CoreServices
-import Foundation
 
 // Two private-but-long-stable system calls that make RetinaShot behave like the built-in screenshot tool.
 // Each is wrapped so a future macOS that stops honoring it degrades gracefully instead of failing.
@@ -8,12 +8,13 @@ import Foundation
 @_silgen_name("CGSSetConnectionProperty")
 private func CGSSetConnectionProperty(_ cid: UInt32, _ owner: UInt32, _ key: CFString, _ value: CFTypeRef) -> Int32
 
-/// Lets this app change the mouse pointer while another app stays active, so the crosshair can appear
-/// without stealing focus (and window shadows) from whatever you are working in.
-@discardableResult
-func enableCursorChangesInBackground() -> Bool {
+/// Shows the crosshair while another app stays active, so the selection never steals focus (or window
+/// shadows) from whatever you are working in. The window server does not keep the permission reliably,
+/// so it is re-granted on every call rather than once at launch.
+func showCrosshairInBackground() {
     let cid = CGSMainConnectionID()
-    return CGSSetConnectionProperty(cid, cid, "SetsCursorInBackground" as CFString, kCFBooleanTrue) == 0
+    CGSSetConnectionProperty(cid, cid, "SetsCursorInBackground" as CFString, kCFBooleanTrue)
+    NSCursor.crosshair.set()
 }
 
 @_silgen_name("MDItemSetAttribute")
