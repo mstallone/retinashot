@@ -2,10 +2,18 @@
 
 A menu-bar replacement for Shift-Cmd-4 on macOS 27.
 
+<p align="center">
+  <img src="assets/hero.png" alt="RetinaShot icon and tagline: Shift-Cmd-4 at full Retina resolution on macOS 27" width="800">
+</p>
+
 **Why it exists.** macOS 27 rewrote `/usr/sbin/screencapture` on ScreenCaptureKit, and its
 "selected portion" path saves 1 pixel per point (a 600×400 pt selection becomes a 600×400 px file
 tagged 144 dpi) while window and full-screen captures are still 2x. RetinaShot captures the whole
 display at native resolution and crops, so selections come out at full Retina resolution again.
+
+<p align="center">
+  <img src="assets/comparison.png" alt="The same window captured by the built-in tool at 1 pixel per point and by RetinaShot at 2 pixels per point, with 4x loupes showing the difference" width="800">
+</p>
 
 **What it does**
 
@@ -19,6 +27,12 @@ display at native resolution and crops, so selections come out at full Retina re
   another app. Honors "Show Floating Thumbnail", file type and window-shadow settings from Apple's
   Options menu.
 - Never activates itself, so the app you are using keeps focus and its window shadows.
+
+<p align="center">
+  <img src="assets/overlay.png" alt="Selecting an area: the rubber-band rectangle, the crosshair, and the size badge" width="800">
+</p>
+
+The illustrations are rendered from synthetic content by `Tools/make-readme-assets.swift`.
 
 **Permission.** Every app that reads screen pixels needs Screen Recording; Apple's shortcuts skip it
 only because they run inside the system. If the switch shows on but captures fail, Option-click the
@@ -36,6 +50,7 @@ menu-bar icon and choose Reset Screen Recording Permission.
     Sources/RetinaShot/Private.swift     two private calls: background cursor, Spotlight screenshot tags
     Resources/Info.plist                 bundle template (version and build are stamped at build time)
     Tools/make-icon.swift                renders AppIcon.icns
+    Tools/make-readme-assets.swift       renders the README illustrations
     Scripts/build-app.sh                 stages RetinaShot.app from a built binary
     Scripts/build-release.sh             CI: universal build, Developer ID, notarize, staple, zip
     Scripts/install-shortcuts.sh         hands Shift-Cmd-4 to RetinaShot
