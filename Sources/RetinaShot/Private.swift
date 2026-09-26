@@ -8,13 +8,13 @@ import CoreServices
 @_silgen_name("CGSSetConnectionProperty")
 private func CGSSetConnectionProperty(_ cid: UInt32, _ owner: UInt32, _ key: CFString, _ value: CFTypeRef) -> Int32
 
-/// Shows the crosshair while another app stays active, so the selection never steals focus (or window
+/// Sets the pointer while another app stays active, so the selection never steals focus (or window
 /// shadows) from whatever you are working in. The window server does not keep the permission reliably,
 /// so it is re-granted on every call rather than once at launch.
-func showCrosshairInBackground() {
+func setCursorInBackground(_ cursor: NSCursor) {
     let cid = CGSMainConnectionID()
     _ = CGSSetConnectionProperty(cid, cid, "SetsCursorInBackground" as CFString, kCFBooleanTrue)
-    NSCursor.crosshair.set()
+    cursor.set()
 }
 
 @_silgen_name("MDItemSetAttribute")

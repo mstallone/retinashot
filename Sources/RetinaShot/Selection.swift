@@ -32,7 +32,9 @@ final class SelectionSession {
         // The pointer resets as the panels appear, so assert the crosshair over the first moments.
         for delay in [0, 0.05, 0.2] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                if self?.finished == false { showCrosshairInBackground() }
+                guard let self = self, !self.finished else { return }
+                let mouse = NSEvent.mouseLocation
+                (self.panels.first { $0.frame.contains(mouse) } ?? self.panels.first)?.selectionView.refreshCursor()
             }
         }
     }
@@ -92,7 +94,8 @@ final class SelectionView: NSView {
     private var cursor: NSPoint?
     private var axisLock: AxisLock?
     private var lastDrawn = NSRect.zero
-    private let badgeFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+    private let badgeAttributes: [NSAttributedString.Key: Any] = [
+        .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.white]
 
     override var isOpaque: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -104,10 +107,10 @@ final class SelectionView: NSView {
 
     // MARK: Mouse
 
-    override func cursorUpdate(with event: NSEvent) { showCrosshairInBackground() }
-    override func mouseEntered(with event: NSEvent) { showCrosshairInBackground(); track(event) }
+    override func cursorUpdate(with event: NSEvent) { track(event) }
+    override func mouseEntered(with event: NSEvent) { track(event) }
     override func mouseExited(with event: NSEvent) { if !isDragging { cursor = nil; redraw() } }
-    override func mouseMoved(with event: NSEvent) { showCrosshairInBackground(); track(event) }
+    override func mouseMoved(with event: NSEvent) { track(event) }
 
     override func mouseDown(with event: NSEvent) {
         isDragging = true
@@ -116,7 +119,6 @@ final class SelectionView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        showCrosshairInBackground()
         let point = location(event)
         if isMoving, let a = anchor, let c = cursor {
             anchor = NSPoint(x: a.x + point.x - c.x, y: a.y + point.y - c.y)
@@ -135,6 +137,13 @@ final class SelectionView: NSView {
         axisLock = nil
         redraw()
         onFinish?(rect.flatMap { $0.width >= 2 && $0.height >= 2 ? $0 : nil })
+    }
+
+    /// Shows the crosshair and badge for wherever the pointer is right now, without waiting for it to move.
+    func refreshCursor() {
+        guard let window = window else { return }
+        cursor = convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+        redraw()
     }
 
     private func location(_ event: NSEvent) -> NSPoint { convert(event.locationInWindow, from: nil) }
@@ -163,53 +172,57 @@ final class SelectionView: NSView {
         axisLock = abs(c.x - a.x) >= abs(c.y - a.y) ? .height(r.minY...r.maxY) : .width(r.minX...r.maxX)
     }
 
-    // MARK: Drawing
+    // MARK: Cursor
 
-    /// The size badge while dragging, otherwise the pointer's coordinates (from the display's top-left, like Apple).
-    private var badge: (text: NSString, box: NSRect)? {
-        let text: NSString
-        let anchor: NSPoint
-        if let r = selection {
-            text = "\(Int(r.width)) × \(Int(r.height))" as NSString
-            anchor = NSPoint(x: r.maxX - 4, y: r.minY - 4)
-        } else if let c = cursor {
-            text = "\(Int(c.x)), \(Int(bounds.height - c.y))" as NSString
-            anchor = NSPoint(x: c.x + 10, y: c.y - 10) // just clear of the crosshair's arms
-        } else {
-            return nil
+    /// The badge rides inside the cursor image, so the window server moves it in lockstep with the
+    /// crosshair instead of the app redrawing it a frame behind. Near an edge it flips to the other side.
+    /// Idle it shows the pointer's coordinates (from the display's top-left, like Apple); dragging, the size.
+    private func updateCursor() {
+        guard let c = cursor else { return }
+        let base = NSCursor.crosshair
+        let text = selection.map { "\(Int($0.width)) × \(Int($0.height))" } ?? "\(Int(c.x)), \(Int(bounds.height - c.y))"
+        let textSize = (text as NSString).size(withAttributes: badgeAttributes)
+        let badge = NSSize(width: (textSize.width + 12).rounded(.up), height: (textSize.height + 6).rounded(.up))
+        let gap: CGFloat = 10
+        let toRight = c.x + gap + badge.width <= bounds.maxX - 4
+        let toBelow = c.y - gap - badge.height >= 4
+
+        // Laid out in flipped (top-left origin) coordinates around the hot spot, as cursor images are.
+        let hot = base.hotSpot, baseSize = base.image.size
+        let crosshairRect = NSRect(x: -hot.x, y: -hot.y, width: baseSize.width, height: baseSize.height)
+        let badgeRect = NSRect(x: toRight ? gap : -gap - badge.width, y: toBelow ? gap : -gap - badge.height,
+                               width: badge.width, height: badge.height)
+        let canvas = crosshairRect.union(badgeRect)
+        let attributes = badgeAttributes
+        let image = NSImage(size: canvas.size, flipped: true) { _ in
+            let shift = CGAffineTransform(translationX: -canvas.minX, y: -canvas.minY)
+            base.image.draw(in: crosshairRect.applying(shift), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            let box = badgeRect.applying(shift)
+            NSColor(white: 0.1, alpha: 0.85).setFill()
+            NSBezierPath(roundedRect: box, xRadius: 5, yRadius: 5).fill()
+            (text as NSString).draw(at: NSPoint(x: box.minX + 6, y: box.minY + 3), withAttributes: attributes)
+            return true
         }
-        let size = text.size(withAttributes: badgeAttributes)
-        var box = NSRect(x: selection == nil ? anchor.x : anchor.x - size.width - 12,
-                         y: anchor.y - size.height - 6, width: size.width + 12, height: size.height + 6)
-        box.origin.x = min(max(box.minX, 4), bounds.maxX - 4 - box.width)
-        if box.minY < 4 { box.origin.y = anchor.y + 10 }
-        return (text, box)
+        setCursorInBackground(NSCursor(image: image, hotSpot: NSPoint(x: -canvas.minX, y: -canvas.minY)))
     }
 
-    private var badgeAttributes: [NSAttributedString.Key: Any] { [.font: badgeFont, .foregroundColor: NSColor.white] }
+    // MARK: Drawing
 
-    /// Invalidate only what was drawn last time and what will be drawn now.
+    /// Update the cursor, and invalidate only what was drawn last time and what will be drawn now.
     private func redraw() {
-        var next = NSRect.zero
-        if let r = selection { next = next.union(r.insetBy(dx: -2, dy: -2)) }
-        if let b = badge { next = next.union(b.box) }
+        updateCursor()
+        let next = selection?.insetBy(dx: -2, dy: -2) ?? .zero
         setNeedsDisplay(lastDrawn.union(next))
         lastDrawn = next
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        if let r = selection {
-            NSColor(white: 1, alpha: 0.10).setFill()
-            r.fill()
-            NSColor(white: 0, alpha: 0.55).setStroke()
-            NSBezierPath(rect: r.insetBy(dx: -0.5, dy: -0.5)).stroke()
-            NSColor.white.setStroke()
-            NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5)).stroke()
-        }
-        if let b = badge {
-            NSColor(white: 0.1, alpha: 0.85).setFill()
-            NSBezierPath(roundedRect: b.box, xRadius: 5, yRadius: 5).fill()
-            b.text.draw(at: NSPoint(x: b.box.minX + 6, y: b.box.minY + 3), withAttributes: badgeAttributes)
-        }
+        guard let r = selection else { return }
+        NSColor(white: 1, alpha: 0.10).setFill()
+        r.fill()
+        NSColor(white: 0, alpha: 0.55).setStroke()
+        NSBezierPath(rect: r.insetBy(dx: -0.5, dy: -0.5)).stroke()
+        NSColor.white.setStroke()
+        NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5)).stroke()
     }
 }
