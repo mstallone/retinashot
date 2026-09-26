@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 APP=/Applications/RetinaShot.app
 
-if [[ -d "$APP" && "$*" != *--replace* ]] && codesign -dv "$APP" 2>&1 | grep -q 'Authority=Developer ID Application'; then
+if [[ -d "$APP" && "$*" != *--replace* ]] && codesign -dvv "$APP" 2>&1 | grep -q '^Authority=Developer ID Application'; then
   echo "$APP is a release build. Pass --replace to overwrite it with a development build." >&2
   exit 1
 fi
