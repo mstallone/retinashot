@@ -1,15 +1,15 @@
 #!/bin/bash
-# One-time setup of the GitHub Actions secrets the Release workflow needs. Same names and material as
-# mx-master-input and runway.
+# One-time setup of the GitHub Actions secrets the Release workflow needs.
 #   Scripts/set-release-secrets.sh <issuer-id> [AuthKey_XXXX.p8] [DeveloperID.p12]
 # With no .p12, the Developer ID identity is exported straight from your login keychain (macOS asks
 # once to allow access to the key) with a random password; nothing is left on disk afterwards.
+# Set DEVELOPER_ID_NAME to a longer prefix if more than one Developer ID identity is installed.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ISSUER="${1:?App Store Connect issuer ID}"
 P8="${2:-$(ls "$HOME"/.appstoreconnect/private_keys/AuthKey_*.p8 2>/dev/null | head -1)}"
 P12="${3:-}"
-IDENTITY_PREFIX="${DEVELOPER_ID_NAME:-Developer ID Application: NextByte}"
+IDENTITY_PREFIX="${DEVELOPER_ID_NAME:-Developer ID Application:}"
 REPO="$(git -C "$ROOT" remote get-url origin | sed -E 's#.*github\.com[:/]##; s#\.git$##')"
 
 [[ -f "$P8" ]] || { echo "App Store Connect API key not found; pass its path as the second argument" >&2; exit 1; }

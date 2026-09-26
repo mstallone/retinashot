@@ -73,12 +73,10 @@ Download `RetinaShot-<version>-macOS.zip` from the [latest release](https://gith
 unzip, and move RetinaShot.app to /Applications. It is a universal binary, signed with Developer ID,
 notarized, and requires macOS 14 or later.
 
-Then hand it the shortcut, which turns off "Save picture of selected area as a file" and its
-clipboard variant under System Settings › Keyboard › Keyboard Shortcuts › Screenshots:
-
-    Scripts/install-shortcuts.sh
-
-`uninstall.sh` reverses both steps. Shift-Cmd-3 and Shift-Cmd-5 are not touched.
+Then turn off the built-in shortcut so RetinaShot can take it: run `Scripts/install-shortcuts.sh`
+from a checkout, or untick "Save picture of selected area as a file" and its clipboard variant under
+System Settings › Keyboard › Keyboard Shortcuts › Screenshots. Shift-Cmd-3 and Shift-Cmd-5 are not
+touched. `uninstall.sh` reverses both steps.
 
 Once Apple fixes the bug (a fresh Shift-Cmd-4 file will be twice its selection size), run
 `uninstall.sh` to hand the shortcut back.
@@ -100,6 +98,7 @@ It refuses to overwrite a release build unless given `--replace`.
     Resources/Info.plist                 bundle template; version and build are stamped at build time
     Tools/make-icon.swift                renders AppIcon.icns
     Tools/make-readme-assets.swift       renders the images in this README from synthetic content
+    Tools/export-identity.swift          exports a signing identity from the keychain as a .p12
     Scripts/build-app.sh                 stages RetinaShot.app from a built binary
     Scripts/build-release.sh             CI: universal build, Developer ID, notarize, staple, zip
     Scripts/install-shortcuts.sh         hands Shift-Cmd-4 to RetinaShot

@@ -33,7 +33,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Full-resolution area screenshots for macOS 27.</string>
+	<string>Copyright © 2026 Matt Stallone. MIT License.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

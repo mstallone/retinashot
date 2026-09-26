@@ -53,7 +53,7 @@ final class SelectionSession {
         keys.forEach(hotKeys.unregister)
         panels.forEach { $0.orderOut(nil) }
         panels.removeAll()
-        NSCursor.arrow.set()
+        setCursorInBackground(.arrow)
         completion(outcome)
     }
 
