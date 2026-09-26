@@ -73,3 +73,7 @@ System Settings › Keyboard › Keyboard Shortcuts › Screenshots).
 
 **Once Apple fixes the bug** (check: a fresh Shift-Cmd-4 file should be twice its selection size),
 run `./uninstall.sh` to hand the shortcut back.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
