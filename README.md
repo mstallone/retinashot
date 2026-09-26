@@ -32,6 +32,8 @@ exactly twice that on every capture; after it, selections are 1x and window capt
 - A thumbnail rises into the bottom-right corner of the display that was captured. Click to open;
   drag into another app.
 - The panels are non-activating, so the app you were using keeps focus and its window shadows.
+- With [MXSwipe](https://github.com/mstallone/mxswipe) also running, the two share one menu-bar icon
+  and menu through [MenuHub](https://github.com/mstallone/menuhub).
 
 | Key | While selecting |
 |---|---|
@@ -53,9 +55,9 @@ and `show-thumbnail`.
 ### Permission
 
 Every process that reads screen pixels needs Screen Recording; Apple's own shortcuts are exempt only
-because they run inside a system process. RetinaShot asks once. If the switch is on but captures
-fail, the stored entry no longer matches the app's signature: Option-click the menu-bar icon and
-choose Reset Screen Recording Permission.
+because they run inside a system process. RetinaShot asks once, and its menu-bar icon is faded until
+the permission is granted. If the switch is on but captures fail, the stored entry no longer matches
+the app's signature: Option-click the menu-bar icon and choose Reset Screen Recording Permission.
 
 ### Private calls
 
