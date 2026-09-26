@@ -1,11 +1,10 @@
 // Renders the README illustrations from synthetic content, so nothing personal ends up in the repo.
-//   make-readme-assets <AppIcon.icns> <output dir>
-// Produces: hero.png (icon, name, one line), comparison.png (built-in 1x vs RetinaShot 2x of the same
-// mock window), overlay.png (the selection overlay's crosshair badge and size badge).
+//   make-readme-assets <output dir>
+// Produces comparison.png (built-in 1x vs RetinaShot 2x of the same mock window) and overlay.png
+// (a selection in progress).
 import AppKit
 
-let icon = NSImage(contentsOfFile: CommandLine.arguments[1])!
-let out = URL(fileURLWithPath: CommandLine.arguments[2])
+let out = URL(fileURLWithPath: CommandLine.arguments[1])
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
 let cream = NSColor(srgbRed: 0xF3 / 255, green: 0xED / 255, blue: 0xE0 / 255, alpha: 1)
@@ -119,13 +118,4 @@ let overlay = bitmap(points: NSSize(width: 800, height: 360), scale: 2) { r in
 }
 write(overlay, "overlay.png")
 
-// 3. hero.png: icon, name, tagline.
-let hero = bitmap(points: NSSize(width: 800, height: 220), scale: 2) { r in
-    cream.setFill(); r.fill()
-    icon.draw(in: NSRect(x: 56, y: 30, width: 160, height: 160))
-    text("RetinaShot", 34, weight: .bold).draw(at: NSPoint(x: 240, y: 118))
-    text("Shift-Cmd-4 at full Retina resolution on macOS 27.", 17, color: NSColor(white: 0.3, alpha: 1)).draw(at: NSPoint(x: 242, y: 86))
-    text("Desktop + clipboard  ·  every display  ·  never steals focus", 13, weight: .medium, color: terracotta).draw(at: NSPoint(x: 242, y: 58))
-}
-write(hero, "hero.png")
-print("wrote hero.png, comparison.png, overlay.png to \(out.path)")
+print("wrote comparison.png, overlay.png to \(out.path)")

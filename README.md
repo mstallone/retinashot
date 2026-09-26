@@ -1,96 +1,128 @@
 # RetinaShot
 
-A menu-bar replacement for Shift-Cmd-4 on macOS 27.
+Replaces Shift-Cmd-4 on macOS 27, where the built-in tool saves area screenshots at half resolution.
+
+## What Apple broke
+
+macOS 27 rewrote `/usr/sbin/screencapture` on ScreenCaptureKit. Its "selected portion" path asks
+`SCScreenshotManager` for a rectangle in points and never scales the output to the display's backing
+factor, so on a Retina display a 600×400 pt selection is saved as a 600×400 px file. Window and
+full-screen captures take a different path and are still 2x. The file is still tagged 144 dpi, so
+it also opens at half size.
+
+The pattern is easy to confirm: every screenshot carries its selection rectangle in Spotlight
+metadata (`kMDItemScreenCaptureGlobalRect`, in points). Before the update the pixel size was
+exactly twice that on every capture; after it, selections are 1x and window captures are 2x.
 
 <p align="center">
-  <img src="assets/hero.png" alt="RetinaShot icon and tagline: Shift-Cmd-4 at full Retina resolution on macOS 27" width="800">
+  <img src="assets/comparison.png" alt="The same mock window saved by the built-in tool at one pixel per point and by RetinaShot at two, with 4x loupes" width="800">
 </p>
 
-**Why it exists.** macOS 27 rewrote `/usr/sbin/screencapture` on ScreenCaptureKit, and its
-"selected portion" path saves 1 pixel per point (a 600×400 pt selection becomes a 600×400 px file
-tagged 144 dpi) while window and full-screen captures are still 2x. RetinaShot captures the whole
-display at native resolution and crops, so selections come out at full Retina resolution again.
+## What RetinaShot does
+
+- On Shift-Cmd-4 (or Ctrl-Shift-Cmd-4) it puts a transparent panel over every display and shows
+  a crosshair. The coordinates, and the selection size while dragging, are rendered into the cursor
+  image, so they move with the pointer instead of trailing it.
+- On release it captures the whole display through ScreenCaptureKit at the display's native pixel
+  size and crops the selection out of that. The PNG is tagged at the display's scale (144 dpi at 2x)
+  and in Display P3, the same as the built-in tool produced before the update.
+- It saves to the Desktop, or to the folder set in the Screenshot app's Options, using Apple's file
+  naming, marks the file as a screenshot for Spotlight and Finder, and puts the image on the
+  clipboard as PNG and TIFF.
+- A thumbnail rises into the bottom-right corner of the display that was captured. Click to open;
+  drag into another app.
+- The panels are non-activating, so the app you were using keeps focus and its window shadows.
+
+| Key | While selecting |
+|---|---|
+| Drag | Select |
+| Space (held) | Move the selection |
+| Shift | Lock width or height |
+| Option | Resize from the center |
+| Space (before dragging) | Switch to Apple's window picker; its window path is unaffected |
+| Escape | Cancel |
 
 <p align="center">
-  <img src="assets/comparison.png" alt="The same window captured by the built-in tool at 1 pixel per point and by RetinaShot at 2 pixels per point, with 4x loupes showing the difference" width="800">
+  <img src="assets/overlay.png" alt="A selection in progress: rectangle, crosshair and size badge" width="800">
 </p>
 
-**What it does**
+Settings are read from Apple's `com.apple.screencapture` domain, so the Screenshot app's Options
+menu keeps working: `location`, `name`, `include-date`, `type` (png, jpg, tiff), `disable-shadow`,
+and `show-thumbnail`.
 
-- Shift-Cmd-4 (or Ctrl-Shift-Cmd-4): crosshair with live coordinates on every display. Drag to select.
-  Space while dragging moves the selection, Shift locks an axis, Option resizes from the center,
-  Escape cancels. Pressing Space before dragging switches to Apple's window picker, whose window
-  path is unaffected by the bug.
-- Saves the file to the Desktop (or the folder set in the Screenshot app's Options) with Apple's
-  naming, tags it as a screenshot for Spotlight and Finder, and copies it to the clipboard.
-- Slides in a floating thumbnail on the display that was captured; click it to open, drag it into
-  another app. Honors "Show Floating Thumbnail", file type and window-shadow settings from Apple's
-  Options menu.
-- Never activates itself, so the app you are using keeps focus and its window shadows.
+### Permission
 
-<p align="center">
-  <img src="assets/overlay.png" alt="Selecting an area: the rubber-band rectangle, the crosshair, and the size badge" width="800">
-</p>
+Every process that reads screen pixels needs Screen Recording; Apple's own shortcuts are exempt only
+because they run inside a system process. RetinaShot asks once. If the switch is on but captures
+fail, the stored entry no longer matches the app's signature: Option-click the menu-bar icon and
+choose Reset Screen Recording Permission.
 
-The illustrations are rendered from synthetic content by `Tools/make-readme-assets.swift`.
+### Private calls
 
-**Permission.** Every app that reads screen pixels needs Screen Recording; Apple's shortcuts skip it
-only because they run inside the system. If the switch shows on but captures fail, Option-click the
-menu-bar icon and choose Reset Screen Recording Permission.
+Two undocumented calls are used, isolated in `Sources/RetinaShot/Private.swift`:
 
-## Layout
+- `CGSSetConnectionProperty(…, "SetsCursorInBackground")` lets a non-active app set the pointer.
+  Without it the crosshair would require activating RetinaShot, which deactivates your window.
+  If a future macOS ignores it, the crosshair stops appearing and nothing else changes.
+- `MDItemSetAttribute` writes `kMDItemIsScreenCapture` and the selection rectangle, as the built-in
+  tool does. If it fails, the file is still saved, just not indexed as a screenshot.
+
+## Install
+
+Download `RetinaShot-<version>-macOS.zip` from the [latest release](https://github.com/mstallone/retinashot/releases/latest),
+unzip, and move RetinaShot.app to /Applications. It is a universal binary, signed with Developer ID,
+notarized, and requires macOS 14 or later.
+
+Then hand it the shortcut, which turns off "Save picture of selected area as a file" and its
+clipboard variant under System Settings › Keyboard › Keyboard Shortcuts › Screenshots:
+
+    Scripts/install-shortcuts.sh
+
+`uninstall.sh` reverses both steps. Shift-Cmd-3 and Shift-Cmd-5 are not touched.
+
+Once Apple fixes the bug (a fresh Shift-Cmd-4 file will be twice its selection size), run
+`uninstall.sh` to hand the shortcut back.
+
+## Building
+
+`./build.sh` builds with SwiftPM, signs with an Apple Development identity so the Screen Recording
+grant survives rebuilds, installs to /Applications, disables the built-in shortcut, and launches.
+It refuses to overwrite a release build unless given `--replace`.
 
     Sources/RetinaShot/main.swift        app lifecycle, menu, capture flow, permission dialog
-    Sources/RetinaShot/Selection.swift   overlay panels and the rubber-band view
+    Sources/RetinaShot/Selection.swift   overlay panels, rubber-band view, cursor with badge
     Sources/RetinaShot/Capture.swift     ScreenCaptureKit capture, crop, save, clipboard
     Sources/RetinaShot/Thumbnail.swift   floating preview
     Sources/RetinaShot/HotKeys.swift     Carbon global hot keys
     Sources/RetinaShot/Preferences.swift Apple's com.apple.screencapture settings
     Sources/RetinaShot/Permission.swift  Screen Recording permission helpers
-    Sources/RetinaShot/Private.swift     two private calls: background cursor, Spotlight screenshot tags
-    Resources/Info.plist                 bundle template (version and build are stamped at build time)
+    Sources/RetinaShot/Private.swift     the two private calls above
+    Resources/Info.plist                 bundle template; version and build are stamped at build time
     Tools/make-icon.swift                renders AppIcon.icns
-    Tools/make-readme-assets.swift       renders the README illustrations
+    Tools/make-readme-assets.swift       renders the images in this README from synthetic content
     Scripts/build-app.sh                 stages RetinaShot.app from a built binary
     Scripts/build-release.sh             CI: universal build, Developer ID, notarize, staple, zip
     Scripts/install-shortcuts.sh         hands Shift-Cmd-4 to RetinaShot
     Scripts/set-release-secrets.sh       one-time GitHub Actions secret setup
-    Tools/export-identity.swift          exports a signing identity from the keychain as .p12
-
-## Local development
-
-`./build.sh` builds with SwiftPM, signs with your Apple Development identity (so the Screen Recording
-grant survives rebuilds), installs to /Applications, disables the built-in shortcut, and launches.
-`./uninstall.sh` removes everything and hands Shift-Cmd-4 back to macOS.
 
 ## Releasing
 
-The tag is the version. Push a `vMAJOR.MINOR.PATCH` tag and the Release workflow builds a universal
-binary, signs it with the NextByte Developer ID (hardened runtime, secure timestamp), notarizes and
-staples it, verifies it with Gatekeeper, and publishes `RetinaShot-<version>-macOS.zip` and its
-SHA-256 to a GitHub Release. `CFBundleVersion` is the commit count.
+The tag is the version. Pushing `vMAJOR.MINOR.PATCH` runs the Release workflow: universal build,
+Developer ID signature with hardened runtime and timestamp, notarization, stapling, Gatekeeper
+check, then a GitHub Release with the zip and its SHA-256. `CFBundleVersion` is the commit count.
 
-    git tag v1.2.0 && git push origin v1.2.0
+    git tag v1.2.2 && git push origin v1.2.2
 
-Required repository secrets (the same material as mx-master-input and runway), set once with
-`Scripts/set-release-secrets.sh <issuer-id>`. It exports the Developer ID identity straight from
-your login keychain (macOS asks once to allow key access) and picks up the App Store Connect key
-from `~/.appstoreconnect/private_keys`; pass a `.p8` and `.p12` path to use other files.
+Secrets, set once with `Scripts/set-release-secrets.sh <issuer-id>` (it exports the Developer ID
+identity from the login keychain and reads the App Store Connect key from `~/.appstoreconnect/private_keys`):
 
-| Secret | What it is |
+| Secret | Contents |
 |---|---|
-| `DEVELOPER_ID_CERTIFICATE_BASE64` | base64 of the Developer ID Application `.p12` (team 8KZBNZJBAX) |
-| `DEVELOPER_ID_CERTIFICATE_PASSWORD` | the password set when exporting that `.p12` |
-| `APPLE_NOTARY_PRIVATE_KEY_BASE64` | base64 of the App Store Connect API private key (`.p8`) |
-| `APPLE_NOTARY_KEY_ID` | the App Store Connect API key ID |
-| `APPLE_NOTARY_ISSUER_ID` | the App Store Connect API issuer ID |
-
-Install a release by unzipping and dragging RetinaShot.app to /Applications; the shortcut takeover is
-`Scripts/install-shortcuts.sh` (or untick "Save picture of selected area as a file" under
-System Settings › Keyboard › Keyboard Shortcuts › Screenshots).
-
-**Once Apple fixes the bug** (check: a fresh Shift-Cmd-4 file should be twice its selection size),
-run `./uninstall.sh` to hand the shortcut back.
+| `DEVELOPER_ID_CERTIFICATE_BASE64` | base64 of the Developer ID Application `.p12` |
+| `DEVELOPER_ID_CERTIFICATE_PASSWORD` | its export password |
+| `APPLE_NOTARY_PRIVATE_KEY_BASE64` | base64 of the App Store Connect API key (`.p8`) |
+| `APPLE_NOTARY_KEY_ID` | that key's ID |
+| `APPLE_NOTARY_ISSUER_ID` | the App Store Connect issuer ID |
 
 ## License
 
