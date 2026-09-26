@@ -4,9 +4,15 @@
 # and relaunches it. Releases are built by CI from a tag (see README).
 #   ./build.sh            build, install, launch
 #   ./build.sh --no-launch
+#   ./build.sh --replace  also overwrite a Developer ID (release) copy in /Applications
 set -euo pipefail
 cd "$(dirname "$0")"
 APP=/Applications/RetinaShot.app
+
+if [[ -d "$APP" && "$*" != *--replace* ]] && codesign -dv "$APP" 2>&1 | grep -q 'Authority=Developer ID Application'; then
+  echo "$APP is a release build. Pass --replace to overwrite it with a development build." >&2
+  exit 1
+fi
 
 swift build -c release
 Scripts/build-app.sh "$(swift build -c release --show-bin-path)/RetinaShot" .build/RetinaShot.app
@@ -16,7 +22,7 @@ SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null | grep -oE '"(Ap
 codesign --force --sign "${SIGN_ID:--}" --identifier cc.stallone.retinashot "$APP"
 
 Scripts/install-shortcuts.sh --quiet
-if [[ "${1:-}" != "--no-launch" ]]; then
+if [[ "$*" != *--no-launch* ]]; then
   pkill -x RetinaShot 2>/dev/null || true
   sleep 0.4
   open -a "$APP"
