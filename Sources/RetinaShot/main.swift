@@ -1,16 +1,16 @@
 import AppKit
 import Carbon.HIToolbox
+import MenuHub
 import ScreenCaptureKit
 import ServiceManagement
 
 let appName = "RetinaShot"
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotKeys = HotKeys()
     private let preferences = ScreenshotPreferences()
-    private let menu = NSMenu()
-    private var statusItem: NSStatusItem?
+    private var hub: MenuHub?
     private var session: SelectionSession?
     private var thumbnail: ThumbnailPanel?
     private var isCapturing = false
@@ -23,12 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSApp.terminate(nil)
             return
         }
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "viewfinder.rectangular", accessibilityDescription: appName)
-            ?? NSImage(systemSymbolName: "viewfinder", accessibilityDescription: appName)
-        menu.delegate = self
-        item.menu = menu
-        statusItem = item
+        let icon = NSImage(systemSymbolName: "viewfinder.rectangular", accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: "viewfinder", accessibilityDescription: nil)!
+        hub = MenuHub(icon: icon) { self.section }
 
         for modifiers in [cmdKey | shiftKey, cmdKey | shiftKey | controlKey] {
             hotKeys.register(kVK_ANSI_4, modifiers: modifiers) { [weak self] pressed in if pressed { self?.beginSelection() } }
@@ -37,46 +34,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !ScreenRecording.isGranted { explainPermission() }
     }
 
-    // MARK: Menu, rebuilt on open so every state it shows is current
+    // MARK: Menu
 
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-        let capture = menu.addItem(withTitle: "Capture Selection", action: #selector(captureSelection), keyEquivalent: "4")
-        capture.keyEquivalentModifierMask = [.shift, .command]
-        menu.addItem(withTitle: "Capture Window", action: #selector(captureWindow), keyEquivalent: "")
-        menu.addItem(.separator())
-
-        let thumb = menu.addItem(withTitle: "Show Floating Thumbnail", action: #selector(toggleThumbnail), keyEquivalent: "")
-        thumb.state = preferences.showsThumbnail ? .on : .off
-        let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        if ScreenRecording.isGranted {
-            let granted = menu.addItem(withTitle: "Screen Recording Allowed", action: nil, keyEquivalent: "")
-            granted.state = .on
-        } else {
-            menu.addItem(withTitle: "Allow Screen Recording…", action: #selector(showPermissionHelp), keyEquivalent: "")
-        }
-        let reset = menu.addItem(withTitle: "Reset Screen Recording Permission…", action: #selector(resetPermission), keyEquivalent: "")
-        reset.isAlternate = true
-        reset.keyEquivalentModifierMask = .option
-        menu.addItem(withTitle: "Reveal Screenshots in Finder", action: #selector(revealFolder), keyEquivalent: "")
-        menu.addItem(.separator())
-
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-        menu.addItem(withTitle: "\(appName) \(version)", action: nil, keyEquivalent: "")
-        menu.addItem(withTitle: "Quit \(appName)", action: #selector(NSApplication.terminate), keyEquivalent: "q")
+    /// This app's part of the menu, read again whenever it may be shown, so every state it shows is current.
+    private var section: MenuSection {
+        let granted = ScreenRecording.isGranted
+        return MenuSection(items: [
+            .action("Capture Selection", key: "4", modifiers: [.shift, .command]) { self.afterMenuCloses { self.beginSelection() } },
+            .action("Capture Window") {
+                self.afterMenuCloses { self.capture(on: nil) { await Capture.window(preferences: self.preferences) } }
+            },
+            .separator,
+            .action("Show Floating Thumbnail", isOn: preferences.showsThumbnail) { self.preferences.showsThumbnail.toggle() },
+            .action("Open at Login", isOn: SMAppService.mainApp.status == .enabled) { self.toggleLogin() },
+            granted ? .info("Screen Recording Allowed", isOn: true) : .action("Allow Screen Recording…") { self.explainPermission() },
+            .alternate("Reset Screen Recording Permission…") { self.resetPermission() },
+            .action("Reveal Screenshots in Finder") { NSWorkspace.shared.activateFileViewerSelecting([self.preferences.directory]) },
+        ], isActive: granted)
     }
 
-    @objc private func captureSelection() { afterMenuCloses { self.beginSelection() } }
-    @objc private func captureWindow() { afterMenuCloses { self.capture(on: nil) { await Capture.window(preferences: self.preferences) } } }
-    @objc private func toggleThumbnail() { preferences.showsThumbnail.toggle() }
-    @objc private func toggleLogin() {
+    private func toggleLogin() {
         do { try SMAppService.mainApp.status == .enabled ? SMAppService.mainApp.unregister() : SMAppService.mainApp.register() }
         catch { NSApp.presentError(error) }
     }
-    @objc private func showPermissionHelp() { explainPermission() }
-    @objc private func resetPermission() { ScreenRecording.reset(); relaunch() }
-    @objc private func revealFolder() { NSWorkspace.shared.activateFileViewerSelecting([preferences.directory]) }
+
+    private func resetPermission() { ScreenRecording.reset(); relaunch() }
 
     /// Menu actions arrive as the menu starts fading; wait for it to leave the screen so it isn't captured.
     private func afterMenuCloses(_ work: @escaping @MainActor () -> Void) {
@@ -140,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Permission
 
     private func explainPermission() {
+        hub?.update() // fades the icon, if the permission was just found missing
         ScreenRecording.request()
         let alert = NSAlert()
         alert.messageText = "\(appName) needs Screen Recording permission"

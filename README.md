@@ -32,6 +32,8 @@ exactly twice that on every capture; after it, selections are 1x and window capt
 - A thumbnail rises into the bottom-right corner of the display that was captured. Click to open;
   drag into another app.
 - The panels are non-activating, so the app you were using keeps focus and its window shadows.
+- With [MXSwipe](https://github.com/mstallone/mxswipe) also running, the two share one menu-bar icon
+  and menu through [MenuHub](https://github.com/mstallone/menuhub).
 
 | Key | While selecting |
 |---|---|
