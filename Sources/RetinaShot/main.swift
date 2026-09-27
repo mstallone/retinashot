@@ -23,9 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
-        let icon = NSImage(systemSymbolName: "viewfinder.rectangular", accessibilityDescription: nil)
-            ?? NSImage(systemSymbolName: "viewfinder", accessibilityDescription: nil)!
-        hub = MenuHub(icon: icon) { self.section }
+        let symbol = NSImage(systemSymbolName: "viewfinder.rectangular", accessibilityDescription: nil) != nil
+            ? "viewfinder.rectangular" : "viewfinder"
+        hub = MenuHub(symbol: symbol) { self.section }
 
         for modifiers in [cmdKey | shiftKey, cmdKey | shiftKey | controlKey] {
             hotKeys.register(kVK_ANSI_4, modifiers: modifiers) { [weak self] pressed in if pressed { self?.beginSelection() } }
