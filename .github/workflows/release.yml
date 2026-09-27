@@ -31,7 +31,6 @@ jobs:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # full history: CFBundleVersion is the commit count
           persist-credentials: false
 
       - name: Verify build environment
@@ -47,6 +46,7 @@ jobs:
           APPLE_NOTARY_PRIVATE_KEY_BASE64: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY_BASE64 }}
           APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
           APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
           set -euo pipefail
 
@@ -60,7 +60,8 @@ jobs:
             DEVELOPER_ID_CERTIFICATE_PASSWORD \
             APPLE_NOTARY_PRIVATE_KEY_BASE64 \
             APPLE_NOTARY_KEY_ID \
-            APPLE_NOTARY_ISSUER_ID
+            APPLE_NOTARY_ISSUER_ID \
+            SPARKLE_ED_PRIVATE_KEY
           do
             if [[ -z "${!name:-}" ]]; then
               echo "::error::Missing required repository secret: $name"
@@ -134,6 +135,11 @@ jobs:
           APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
         run: Scripts/build-release.sh "$GITHUB_REF_NAME"
 
+      - name: Generate signed Sparkle appcast
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: Scripts/generate-appcast.sh "$GITHUB_REF_NAME"
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -143,6 +149,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             "dist/RetinaShot-${version}-macOS.zip" \
             "dist/RetinaShot-${version}-macOS.zip.sha256" \
+            "dist/appcast.xml" \
             --verify-tag \
             --title "RetinaShot $version" \
             --generate-notes

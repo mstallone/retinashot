@@ -34,7 +34,7 @@ exactly twice that on every capture; after it, selections are 1x and window capt
   drag into another app.
 - The panels are non-activating, so the app you were using keeps focus and its window shadows.
 - With [MXSwipe](https://github.com/mstallone/mxswipe) also running, the two share one menu-bar icon
-  and menu through [MenuHub](https://github.com/mstallone/menuhub).
+  and menu through [MenuHub](https://github.com/mstallone/menuhub), with one Check for Updates… for both.
 
 | Key | While selecting |
 |---|---|
@@ -74,7 +74,8 @@ Two undocumented calls are used, isolated in `Sources/RetinaShot/Private.swift`:
 
 Download `RetinaShot-<version>-macOS.zip` from the [latest release](https://github.com/mstallone/retinashot/releases/latest),
 unzip, and move RetinaShot.app to /Applications. It is a universal binary, signed with Developer ID,
-notarized, and requires macOS 27.
+notarized, and requires macOS 27. From 1.5.0 it updates itself through [Sparkle](https://sparkle-project.org);
+1.4.0 and earlier are replaced by hand.
 
 Then turn off the built-in shortcut so RetinaShot can take it: run `Scripts/install-shortcuts.sh`
 from a checkout, or untick "Save picture of selected area as a file" and its clipboard variant under
@@ -98,12 +99,14 @@ It refuses to overwrite a release build unless given `--replace`.
     Sources/RetinaShot/Preferences.swift Apple's com.apple.screencapture settings
     Sources/RetinaShot/Permission.swift  Screen Recording permission helpers
     Sources/RetinaShot/Private.swift     the two private calls above
-    Resources/Info.plist                 bundle template; version and build are stamped at build time
+    Resources/Info.plist                 bundle template; the version is stamped at build time
     Tools/make-icon.swift                renders AppIcon.icns
     Tools/make-readme-assets.swift       renders the images in this README from synthetic content
     Tools/export-identity.swift          exports a signing identity from the keychain as a .p12
-    Scripts/build-app.sh                 stages RetinaShot.app from a built binary
+    Scripts/build-app.sh                 stages RetinaShot.app from a built binary, with Sparkle
+    Scripts/sign.sh                      signs the app and Sparkle inside out
     Scripts/build-release.sh             CI: universal build, Developer ID, notarize, staple, zip
+    Scripts/generate-appcast.sh          CI: signed Sparkle appcast for the release
     Scripts/install-shortcuts.sh         hands Shift-Cmd-4 to RetinaShot
     Scripts/set-release-secrets.sh       one-time GitHub Actions secret setup
 
@@ -111,12 +114,13 @@ It refuses to overwrite a release build unless given `--replace`.
 
 The tag is the version. Pushing `vMAJOR.MINOR.PATCH` runs the Release workflow: universal build,
 Developer ID signature with hardened runtime and timestamp, notarization, stapling, Gatekeeper
-check, then a GitHub Release with the zip and its SHA-256. `CFBundleVersion` is the commit count.
+check, then a GitHub Release with the zip, its SHA-256, and a signed Sparkle `appcast.xml`.
 
     git tag v1.2.2 && git push origin v1.2.2
 
 Secrets, set once with `Scripts/set-release-secrets.sh <issuer-id>` (it exports the Developer ID
-identity from the login keychain and reads the App Store Connect key from `~/.appstoreconnect/private_keys`):
+identity and the Sparkle key from the login keychain, and reads the App Store Connect key from
+`~/.appstoreconnect/private_keys`):
 
 | Secret | Contents |
 |---|---|
@@ -125,6 +129,10 @@ identity from the login keychain and reads the App Store Connect key from `~/.ap
 | `APPLE_NOTARY_PRIVATE_KEY_BASE64` | base64 of the App Store Connect API key (`.p8`) |
 | `APPLE_NOTARY_KEY_ID` | that key's ID |
 | `APPLE_NOTARY_ISSUER_ID` | the App Store Connect issuer ID |
+| `SPARKLE_ED_PRIVATE_KEY` | the EdDSA key from Sparkle's `generate_keys --account cc.stallone.retinashot` |
+
+The public half of the Sparkle key is `SUPublicEDKey` in `Resources/Info.plist`. Installed copies accept
+only updates signed with that key and the same Developer ID team, so keep a backup of both.
 
 ## License
 

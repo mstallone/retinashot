@@ -1,13 +1,22 @@
 {
-  "originHash" : "c6e1e20f3b47dc83851dfcde759928965b0039d0943fca95f03cb3d8b41fe26e",
+  "originHash" : "c9711a2704951f8996ceb15e5ae0ef63bda2e4038e7826cbe81f4c87b5eb8be4",
   "pins" : [
     {
       "identity" : "menuhub",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mstallone/menuhub",
       "state" : {
-        "revision" : "4350830925635a9d201d0a0ba2d5b2169da6c0ac",
-        "version" : "0.2.0"
+        "revision" : "3883159ab8deb0d5b1c73800d0ca4bb3dba40289",
+        "version" : "0.3.0"
+      }
+    },
+    {
+      "identity" : "sparkle",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sparkle-project/Sparkle",
+      "state" : {
+        "revision" : "b6496a74a087257ef5e6da1c5b29a447a60f5bd7",
+        "version" : "2.9.4"
       }
     }
   ],

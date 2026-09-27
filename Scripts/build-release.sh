@@ -46,15 +46,18 @@ ARCHS="$(lipo -archs "$APP/Contents/MacOS/$PRODUCT")"
 [[ " $ARCHS " == *" arm64 "* && " $ARCHS " == *" x86_64 "* ]] || fail "expected a universal binary, got: $ARCHS"
 
 printf 'Signing with Developer ID (hardened runtime, secure timestamp)...\n'
-sign=(codesign --force --sign "$SIGNING_IDENTITY" --options runtime --timestamp)
-[[ -n "${RELEASE_KEYCHAIN_PATH:-}" ]] && sign+=(--keychain "$RELEASE_KEYCHAIN_PATH")
-"${sign[@]}" "$APP"
-codesign --verify --deep --strict --verbose=2 "$APP"
-DETAILS="$(codesign -d --verbose=4 "$APP" 2>&1)"
-grep -Fq 'Authority=Developer ID Application:' <<<"$DETAILS" || fail "release is not signed with Developer ID Application"
-grep -Fq "TeamIdentifier=$EXPECTED_TEAM_ID" <<<"$DETAILS" || fail "release signature has the wrong team identifier"
-grep -Eq 'flags=.*runtime' <<<"$DETAILS" || fail "release signature does not enable hardened runtime"
-grep -Fq 'Timestamp=' <<<"$DETAILS" || fail "release signature does not include a secure timestamp"
+flags=(--options runtime --timestamp)
+[[ -n "${RELEASE_KEYCHAIN_PATH:-}" ]] && flags+=(--keychain "$RELEASE_KEYCHAIN_PATH")
+"$SCRIPT_DIR/sign.sh" "$APP" "$SIGNING_IDENTITY" "${flags[@]}"
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+for code in "$APP" "$SPARKLE" "$SPARKLE/Versions/B/Autoupdate" "$SPARKLE/Versions/B/Updater.app" \
+            "$SPARKLE/Versions/B/XPCServices/Installer.xpc" "$SPARKLE/Versions/B/XPCServices/Downloader.xpc"; do
+  DETAILS="$(codesign -d --verbose=4 "$code" 2>&1)"
+  grep -Fq 'Authority=Developer ID Application:' <<<"$DETAILS" || fail "$code is not signed with Developer ID Application"
+  grep -Fq "TeamIdentifier=$EXPECTED_TEAM_ID" <<<"$DETAILS" || fail "$code has the wrong team identifier"
+  grep -Eq 'flags=.*runtime' <<<"$DETAILS" || fail "$code does not enable hardened runtime"
+  grep -Fq 'Timestamp=' <<<"$DETAILS" || fail "$code does not include a secure timestamp"
+done
 if codesign -d --entitlements :- "$APP" 2>&1 | grep -Fq 'com.apple.security.get-task-allow'; then
   fail "release contains the development get-task-allow entitlement"
 fi
