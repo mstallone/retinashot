@@ -69,19 +69,21 @@ enum Capture {
         return publish(rep, at: url)
     }
 
-    /// A display at its native pixel size, without this app's windows.
+    /// A display at its native pixel size, without this app's windows. `SCScreenshotConfiguration` rather
+    /// than the older stream configuration, which leaves out every window's shadow on macOS 27.
     private static func image(of display: SCDisplay, content: SCShareableContent) async throws -> CGImage {
         let mode = CGDisplayCopyDisplayMode(display.displayID)
-        let ownWindows = content.windows.filter { $0.owningApplication?.processID == getpid() }
-        let config = SCStreamConfiguration()
+        let config = SCScreenshotConfiguration()
         config.width = mode?.pixelWidth ?? Int(display.frame.width * 2)
         config.height = mode?.pixelHeight ?? Int(display.frame.height * 2)
-        config.captureResolution = .best
-        config.scalesToFit = false
         config.showsCursor = false
-        config.colorSpaceName = CGColorSpace.displayP3 // what Apple's tool embeds on Apple displays
-        return try await SCScreenshotManager.captureImage(
+        config.ignoreShadows = false
+        config.dynamicRange = .sdr
+        let ownWindows = content.windows.filter { $0.owningApplication?.processID == getpid() }
+        let output = try await SCScreenshotManager.captureScreenshot(
             contentFilter: SCContentFilter(display: display, excludingWindows: ownWindows), configuration: config)
+        guard let image = output.sdrImage else { throw CaptureError.crop }
+        return image
     }
 
     /// Window capture, delegated to Apple's tool: its window path is unaffected by the macOS 27 bug, and its

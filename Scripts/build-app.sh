@@ -21,10 +21,11 @@ fi
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-# SwiftPM stamps the linked SDK as the deployment target (14.0). AppKit keys modern control and alert
-# styling off that stamp, so restamp it to the SDK actually used while keeping minos at 14.0.
+# SwiftPM stamps the deployment target as the SDK version. AppKit keys modern control and alert styling off
+# that stamp, so restamp it with the SDK actually used. The minimum is macOS 27, the only release with the
+# bug; the package targets 26 so CI's Xcode 26 SDK can build it.
 SDK="$(xcrun --sdk macosx --show-sdk-version)"
-vtool -set-build-version macos 14.0 "$SDK" -replace -output "$APP/Contents/MacOS/RetinaShot" "$BINARY"
+vtool -set-build-version macos 27.0 "$SDK" -replace -output "$APP/Contents/MacOS/RetinaShot" "$BINARY"
 chmod +x "$APP/Contents/MacOS/RetinaShot"
 cp "$ICON" "$APP/Contents/Resources/AppIcon.icns"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" "$ROOT/Resources/Info.plist" >"$APP/Contents/Info.plist"
