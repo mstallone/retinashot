@@ -1,10 +1,10 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
     name: "RetinaShot",
-    platforms: [.macOS(.v14)],
-    dependencies: [.package(url: "https://github.com/mstallone/menuhub", exact: "0.1.0")],
+    platforms: [.macOS(.v26)],
+    dependencies: [.package(url: "https://github.com/mstallone/menuhub", exact: "0.2.0")],
     targets: [
         .executableTarget(
             name: "RetinaShot",

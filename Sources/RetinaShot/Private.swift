@@ -20,8 +20,13 @@ func setCursorInBackground(_ cursor: NSCursor) {
 @_silgen_name("MDItemSetAttribute")
 private func MDItemSetAttribute(_ item: MDItem, _ name: CFString, _ value: CFTypeRef?) -> DarwinBoolean
 
-/// Tags a file the way Apple's screencapture does, so Finder, Spotlight and Photos treat it as a screenshot.
+/// Tags a file the way Apple's screencapture does, so Finder, Spotlight and Photos treat it as a screenshot,
+/// and hides its extension, as screencapture does.
 func tagAsScreenshot(_ url: URL, kind: String, globalRect: CGRect?) {
+    var file = url
+    var values = URLResourceValues()
+    values.hasHiddenExtension = true
+    try? file.setResourceValues(values)
     guard let item = MDItemCreateWithURL(kCFAllocatorDefault, url as CFURL) else { return }
     _ = MDItemSetAttribute(item, "kMDItemIsScreenCapture" as CFString, kCFBooleanTrue)
     _ = MDItemSetAttribute(item, "kMDItemScreenCaptureType" as CFString, kind as CFString)

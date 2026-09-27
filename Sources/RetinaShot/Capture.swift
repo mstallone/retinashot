@@ -23,26 +23,34 @@ enum Capture {
         try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
     }
 
-    /// Selection at full Retina resolution: grab the whole display at its native pixel size, then crop.
-    /// `rect` is in global CoreGraphics points (origin top-left of the main display).
-    static func selection(_ rect: CGRect, content: SCShareableContent, preferences: ScreenshotPreferences) async throws -> Screenshot {
+    /// Whether another app has a menu open. A click would close it, so the selection is made on the displays
+    /// as they are when it starts, the way the built-in tool keeps an open menu in the shot.
+    static func menuIsOpen() -> Bool {
+        let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+        let menuLevel = Int(CGWindowLevelForKey(.popUpMenuWindow))
+        return windows.contains { $0[kCGWindowLayer as String] as? Int == menuLevel && $0[kCGWindowOwnerPID as String] as? Int32 != getpid() }
+    }
+
+    /// Every display as it is now, starting with the one under the pointer, where a menu is likeliest.
+    static func freeze(content: SCShareableContent) async throws -> [CGDirectDisplayID: CGImage] {
+        let pointer = CGEvent(source: nil)?.location ?? .zero
+        var images: [CGDirectDisplayID: CGImage] = [:]
+        for display in content.displays.sorted(by: { $0.frame.contains(pointer) && !$1.frame.contains(pointer) }) {
+            images[display.displayID] = try await image(of: display, content: content)
+        }
+        return images
+    }
+
+    /// Selection at full Retina resolution: the whole display at its native pixel size, cropped. Uses the
+    /// display's `frozen` image when there is one. `rect` is in global CoreGraphics points (origin top-left
+    /// of the main display).
+    static func selection(_ rect: CGRect, content: SCShareableContent, frozen: [CGDirectDisplayID: CGImage]?,
+                          preferences: ScreenshotPreferences) async throws -> Screenshot {
         let center = CGPoint(x: rect.midX, y: rect.midY)
         guard let display = content.displays.first(where: { $0.frame.contains(center) }) else { throw CaptureError.noDisplay }
-        let mode = CGDisplayCopyDisplayMode(display.displayID)
-        let pixelWidth = mode?.pixelWidth ?? Int(display.frame.width * 2)
-        let pixelHeight = mode?.pixelHeight ?? Int(display.frame.height * 2)
-        let scale = CGFloat(pixelWidth) / display.frame.width
-
-        let ownWindows = content.windows.filter { $0.owningApplication?.processID == getpid() }
-        let config = SCStreamConfiguration()
-        config.width = pixelWidth
-        config.height = pixelHeight
-        config.captureResolution = .best
-        config.scalesToFit = false
-        config.showsCursor = false
-        config.colorSpaceName = CGColorSpace.displayP3 // what Apple's tool embeds on Apple displays
-        let full = try await SCScreenshotManager.captureImage(
-            contentFilter: SCContentFilter(display: display, excludingWindows: ownWindows), configuration: config)
+        let full: CGImage
+        if let image = frozen?[display.displayID] { full = image } else { full = try await image(of: display, content: content) }
+        let scale = CGFloat(full.width) / display.frame.width
 
         let local = rect.offsetBy(dx: -display.frame.minX, dy: -display.frame.minY)
         let pixels = CGRect(x: (local.minX * scale).rounded(), y: (local.minY * scale).rounded(),
@@ -59,6 +67,23 @@ enum Capture {
         try data.write(to: url, options: .atomic)
         tagAsScreenshot(url, kind: "selection", globalRect: rect)
         return publish(rep, at: url)
+    }
+
+    /// A display at its native pixel size, without this app's windows. `SCScreenshotConfiguration` rather
+    /// than the older stream configuration, which leaves out every window's shadow on macOS 27.
+    private static func image(of display: SCDisplay, content: SCShareableContent) async throws -> CGImage {
+        let mode = CGDisplayCopyDisplayMode(display.displayID)
+        let config = SCScreenshotConfiguration()
+        config.width = mode?.pixelWidth ?? Int(display.frame.width * 2)
+        config.height = mode?.pixelHeight ?? Int(display.frame.height * 2)
+        config.showsCursor = false
+        config.ignoreShadows = false
+        config.dynamicRange = .sdr
+        let ownWindows = content.windows.filter { $0.owningApplication?.processID == getpid() }
+        let output = try await SCScreenshotManager.captureScreenshot(
+            contentFilter: SCContentFilter(display: display, excludingWindows: ownWindows), configuration: config)
+        guard let image = output.sdrImage else { throw CaptureError.crop }
+        return image
     }
 
     /// Window capture, delegated to Apple's tool: its window path is unaffected by the macOS 27 bug, and its

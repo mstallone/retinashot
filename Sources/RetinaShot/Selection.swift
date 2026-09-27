@@ -39,6 +39,13 @@ final class SelectionSession {
         }
     }
 
+    /// Shows each display as it was frozen, under the selection.
+    func showFrozen(_ images: [CGDirectDisplayID: CGImage]) {
+        for panel in panels {
+            if let id = panel.display.displayID, let image = images[id] { panel.showFrozen(image) }
+        }
+    }
+
     private func space(_ pressed: Bool) {
         if let dragging = panels.first(where: { $0.selectionView.isDragging }) {
             dragging.selectionView.isMoving = pressed
@@ -80,8 +87,20 @@ final class OverlayPanel: NSPanel {
         isReleasedWhenClosed = false
         animationBehavior = .none
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        contentView = selectionView
+        let content = NSView(frame: selectionView.frame)
+        content.wantsLayer = true
+        selectionView.autoresizingMask = [.width, .height]
+        content.addSubview(selectionView)
+        contentView = content
     }
+
+    func showFrozen(_ image: CGImage) {
+        contentView?.layer?.contents = image
+    }
+}
+
+extension NSScreen {
+    var displayID: CGDirectDisplayID? { deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID }
 }
 
 final class SelectionView: NSView {

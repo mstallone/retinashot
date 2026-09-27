@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isCapturing = false
     private var prefetchedContent: SCShareableContent?
     private var permissionWatch: Timer?
+    private var shortcuts: [UInt32] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if CommandLine.arguments.contains("--unregister-login") { // used by uninstall.sh
@@ -23,15 +24,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
-        let icon = NSImage(systemSymbolName: "viewfinder.rectangular", accessibilityDescription: nil)
-            ?? NSImage(systemSymbolName: "viewfinder", accessibilityDescription: nil)!
-        hub = MenuHub(icon: icon) { self.section }
+        // Yields the shared icon, so another app's menu is the one open and Shift-Cmd-4 can capture it. Alone,
+        // this app's own menu holds its hot keys until it closes, so they step aside for the menu's Capture
+        // Selection item, which closes the menu and then captures.
+        hub = MenuHub(symbol: "viewfinder.rectangular", yieldsIcon: true) { self.section }
+        hub?.onMenuOpen = { open in if open { self.releaseShortcuts() } else { self.registerShortcuts() } }
 
-        for modifiers in [cmdKey | shiftKey, cmdKey | shiftKey | controlKey] {
-            hotKeys.register(kVK_ANSI_4, modifiers: modifiers) { [weak self] pressed in if pressed { self?.beginSelection() } }
-        }
+        registerShortcuts()
         if SMAppService.mainApp.status == .notRegistered { try? SMAppService.mainApp.register() }
         if !ScreenRecording.isGranted { explainPermission() }
+    }
+
+    private func registerShortcuts() {
+        guard shortcuts.isEmpty else { return }
+        shortcuts = [cmdKey | shiftKey, cmdKey | shiftKey | controlKey].map { modifiers in
+            hotKeys.register(kVK_ANSI_4, modifiers: modifiers) { [weak self] pressed in if pressed { self?.beginSelection() } }
+        }
+    }
+
+    private func releaseShortcuts() {
+        shortcuts.forEach(hotKeys.unregister)
+        shortcuts = []
     }
 
     // MARK: Menu
@@ -76,25 +89,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         thumbnail?.dismiss()
         prefetchedContent = nil
         let prefetch = Task { prefetchedContent = try? await Capture.shareableContent() } // so the grab is instant on mouse-up
+        let frozen = Capture.menuIsOpen() ? Task { try? await Capture.freeze(content: Capture.shareableContent()) } : nil
         session = SelectionSession(hotKeys: hotKeys) { [weak self] outcome in
             guard let self = self else { return }
             self.session = nil
             switch outcome {
             case .cancelled:
                 prefetch.cancel()
+                frozen?.cancel()
             case .window:
                 prefetch.cancel()
+                frozen?.cancel()
                 self.capture(on: nil) { await Capture.window(preferences: self.preferences) }
             case .selected(let rect, let screen):
                 self.capture(on: screen) {
                     await prefetch.value
                     let content: SCShareableContent
                     if let prefetched = self.prefetchedContent { content = prefetched } else { content = try await Capture.shareableContent() }
-                    try await Task.sleep(nanoseconds: 30_000_000) // one frame for the overlay to leave the screen
-                    return try await Capture.selection(rect, content: content, preferences: self.preferences)
+                    let images = await frozen?.value ?? nil
+                    if images == nil { try await Task.sleep(nanoseconds: 30_000_000) } // one frame for the overlay to leave the screen
+                    return try await Capture.selection(rect, content: content, frozen: images, preferences: self.preferences)
                 }
             }
         }
+        if let frozen { Task { if let images = await frozen.value { session?.showFrozen(images) } } }
     }
 
     /// Runs a capture, then shows the thumbnail on `screen` (the display captured) or, for window

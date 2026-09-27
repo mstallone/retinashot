@@ -24,11 +24,12 @@ exactly twice that on every capture; after it, selections are 1x and window capt
   a crosshair. The coordinates, and the selection size while dragging, are rendered into the cursor
   image, so they move with the pointer instead of trailing it.
 - On release it captures the whole display through ScreenCaptureKit at the display's native pixel
-  size and crops the selection out of that. The PNG is tagged at the display's scale (144 dpi at 2x)
-  and in Display P3, the same as the built-in tool produced before the update.
+  size, window shadows included, and crops the selection out of that. The pixels match Apple's own
+  full-screen capture of that display, and the PNG is tagged at the display's scale (144 dpi at 2x)
+  with the display's color profile, as the built-in tool's were before the update.
 - It saves to the Desktop, or to the folder set in the Screenshot app's Options, using Apple's file
-  naming, marks the file as a screenshot for Spotlight and Finder, and puts the image on the
-  clipboard as PNG and TIFF.
+  naming and a hidden extension, marks the file as a screenshot for Spotlight and Finder, and puts
+  the image on the clipboard as PNG and TIFF.
 - A thumbnail rises into the bottom-right corner of the display that was captured. Click to open;
   drag into another app.
 - The panels are non-activating, so the app you were using keeps focus and its window shadows.
@@ -73,7 +74,7 @@ Two undocumented calls are used, isolated in `Sources/RetinaShot/Private.swift`:
 
 Download `RetinaShot-<version>-macOS.zip` from the [latest release](https://github.com/mstallone/retinashot/releases/latest),
 unzip, and move RetinaShot.app to /Applications. It is a universal binary, signed with Developer ID,
-notarized, and requires macOS 14 or later.
+notarized, and requires macOS 27.
 
 Then turn off the built-in shortcut so RetinaShot can take it: run `Scripts/install-shortcuts.sh`
 from a checkout, or untick "Save picture of selected area as a file" and its clipboard variant under
