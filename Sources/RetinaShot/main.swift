@@ -51,9 +51,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Menu
 
     /// This app's part of the menu, read again whenever it may be shown, so every state it shows is current.
+    /// Without Screen Recording, the header says so and the fix comes first; with it, nothing is said.
     private var section: MenuSection {
         let granted = ScreenRecording.isGranted
-        return MenuSection(items: [
+        var items: [MenuItem] = []
+        if !granted {
+            items += [.action("Allow Screen Recording…") { self.explainPermission() },
+                      .alternate("Reset Screen Recording Permission…") { self.resetPermission() },
+                      .separator]
+        }
+        items += [
             .action("Capture Selection", key: "4", modifiers: [.shift, .command]) { self.afterMenuCloses { self.beginSelection() } },
             .action("Capture Window") {
                 self.afterMenuCloses { self.capture(on: nil) { await Capture.window(preferences: self.preferences) } }
@@ -61,10 +68,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .separator,
             .action("Show Floating Thumbnail", isOn: preferences.showsThumbnail) { self.preferences.showsThumbnail.toggle() },
             .action("Open at Login", isOn: SMAppService.mainApp.status == .enabled) { self.toggleLogin() },
-            granted ? .info("Screen Recording Allowed", isOn: true) : .action("Allow Screen Recording…") { self.explainPermission() },
-            .alternate("Reset Screen Recording Permission…") { self.resetPermission() },
             .action("Reveal Screenshots in Finder") { NSWorkspace.shared.activateFileViewerSelecting([self.preferences.directory]) },
-        ], isActive: granted)
+        ]
+        let header = granted ? nil : MenuHeader(title: appName, detail: .message("Needs Screen Recording permission."))
+        return MenuSection(header: header, items: items, isActive: granted)
     }
 
     private func toggleLogin() {

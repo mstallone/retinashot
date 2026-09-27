@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "RetinaShot",
     platforms: [.macOS(.v26)],
-    dependencies: [.package(url: "https://github.com/mstallone/menuhub", exact: "0.4.0")],
+    dependencies: [.package(url: "https://github.com/mstallone/menuhub", exact: "0.4.1")],
     targets: [
         .executableTarget(
             name: "RetinaShot",
