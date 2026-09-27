@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isCapturing = false
     private var prefetchedContent: SCShareableContent?
     private var permissionWatch: Timer?
+    private var shortcuts: [UInt32] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if CommandLine.arguments.contains("--unregister-login") { // used by uninstall.sh
@@ -26,12 +27,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let symbol = NSImage(systemSymbolName: "viewfinder.rectangular", accessibilityDescription: nil) != nil
             ? "viewfinder.rectangular" : "viewfinder"
         hub = MenuHub(symbol: symbol) { self.section }
+        // While the menu is open, Shift-Cmd-4 goes to its Capture Selection item instead, which closes the
+        // menu first; the hot key would take the keystroke and hold it until the menu closed.
+        hub?.onMenuOpen = { open in if open { self.releaseShortcuts() } else { self.registerShortcuts() } }
 
-        for modifiers in [cmdKey | shiftKey, cmdKey | shiftKey | controlKey] {
-            hotKeys.register(kVK_ANSI_4, modifiers: modifiers) { [weak self] pressed in if pressed { self?.beginSelection() } }
-        }
+        registerShortcuts()
         if SMAppService.mainApp.status == .notRegistered { try? SMAppService.mainApp.register() }
         if !ScreenRecording.isGranted { explainPermission() }
+    }
+
+    private func registerShortcuts() {
+        guard shortcuts.isEmpty else { return }
+        shortcuts = [cmdKey | shiftKey, cmdKey | shiftKey | controlKey].map { modifiers in
+            hotKeys.register(kVK_ANSI_4, modifiers: modifiers) { [weak self] pressed in if pressed { self?.beginSelection() } }
+        }
+    }
+
+    private func releaseShortcuts() {
+        shortcuts.forEach(hotKeys.unregister)
+        shortcuts = []
     }
 
     // MARK: Menu
