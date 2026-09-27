@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import MenuHub
+import MenuHubSparkle
 import ScreenCaptureKit
 import ServiceManagement
 
@@ -27,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Yields the shared icon, so another app's menu is the one open and Shift-Cmd-4 can capture it. Alone,
         // this app's own menu holds its hot keys until it closes, so they step aside for the menu's Capture
         // Selection item, which closes the menu and then captures.
-        hub = MenuHub(symbol: "viewfinder.rectangular", yieldsIcon: true) { self.section }
+        hub = MenuHub(symbol: "viewfinder.rectangular", yieldsIcon: true, updater: SparkleUpdater()) { self.section }
         hub?.onMenuOpen = { open in if open { self.releaseShortcuts() } else { self.registerShortcuts() } }
 
         registerShortcuts()

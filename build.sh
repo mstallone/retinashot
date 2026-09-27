@@ -20,7 +20,7 @@ Scripts/build-app.sh "$(swift build -c release --show-bin-path)/RetinaShot" .bui
 rm -rf "$APP" && cp -R .build/RetinaShot.app "$APP"
 
 SIGN_ID="$(security find-identity -v -p codesigning 2>/dev/null | grep -oE '"(Apple Development|Developer ID Application)[^"]*"' | head -1 | tr -d '"')"
-codesign --force --sign "${SIGN_ID:--}" --identifier cc.stallone.retinashot "$APP"
+Scripts/sign.sh "$APP" "${SIGN_ID:--}"
 
 Scripts/install-shortcuts.sh --quiet
 if [[ "$*" != *--no-launch* ]]; then

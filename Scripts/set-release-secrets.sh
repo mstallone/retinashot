@@ -4,6 +4,7 @@
 # With no .p12, the Developer ID identity is exported straight from your login keychain (macOS asks
 # once to allow access to the key) with a random password; nothing is left on disk afterwards.
 # Set DEVELOPER_ID_NAME to a longer prefix if more than one Developer ID identity is installed.
+# The Sparkle key is exported from the login keychain, where generate_keys stored it.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ISSUER="${1:?App Store Connect issuer ID}"
@@ -35,4 +36,6 @@ printf '%s' "$P12_PASSWORD" | gh secret set DEVELOPER_ID_CERTIFICATE_PASSWORD --
 base64 -i "$P8" | gh secret set APPLE_NOTARY_PRIVATE_KEY_BASE64 --repo "$REPO"
 printf '%s' "$KEY_ID" | gh secret set APPLE_NOTARY_KEY_ID --repo "$REPO"
 printf '%s' "$ISSUER" | gh secret set APPLE_NOTARY_ISSUER_ID --repo "$REPO"
+"$ROOT/.build/artifacts/sparkle/Sparkle/bin/generate_keys" --account cc.stallone.retinashot -x "$TEMP/sparkle.key"
+gh secret set SPARKLE_ED_PRIVATE_KEY --repo "$REPO" <"$TEMP/sparkle.key"
 gh secret list --repo "$REPO"

@@ -21,7 +21,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>__VERSION__</string>
 	<key>CFBundleVersion</key>
-	<string>__BUILD__</string>
+	<string>__VERSION__</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
@@ -36,5 +36,13 @@
 	<string>Copyright © 2026 Matt Stallone. MIT License.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/mstallone/retinashot/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>F1qGPKkhW/jo2ymqqZ5S8MypohOu1eO1Q0tCkJm0re0=</string>
 </dict>
 </plist>
