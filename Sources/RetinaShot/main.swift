@@ -26,9 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let symbol = NSImage(systemSymbolName: "viewfinder.rectangular", accessibilityDescription: nil) != nil
             ? "viewfinder.rectangular" : "viewfinder"
-        hub = MenuHub(symbol: symbol) { self.section }
-        // While the menu is open, Shift-Cmd-4 goes to its Capture Selection item instead, which closes the
-        // menu first; the hot key would take the keystroke and hold it until the menu closed.
+        // Yields the shared icon, so another app's menu is the one open and Shift-Cmd-4 can capture it. Alone,
+        // this app's own menu holds its hot keys until it closes, so they step aside for the menu's Capture
+        // Selection item, which closes the menu and then captures.
+        hub = MenuHub(symbol: symbol, yieldsIcon: true) { self.section }
         hub?.onMenuOpen = { open in if open { self.releaseShortcuts() } else { self.registerShortcuts() } }
 
         registerShortcuts()
@@ -90,25 +91,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         thumbnail?.dismiss()
         prefetchedContent = nil
         let prefetch = Task { prefetchedContent = try? await Capture.shareableContent() } // so the grab is instant on mouse-up
+        let frozen = Capture.menuIsOpen() ? Task { try? await Capture.freeze(content: Capture.shareableContent()) } : nil
         session = SelectionSession(hotKeys: hotKeys) { [weak self] outcome in
             guard let self = self else { return }
             self.session = nil
             switch outcome {
             case .cancelled:
                 prefetch.cancel()
+                frozen?.cancel()
             case .window:
                 prefetch.cancel()
+                frozen?.cancel()
                 self.capture(on: nil) { await Capture.window(preferences: self.preferences) }
             case .selected(let rect, let screen):
                 self.capture(on: screen) {
                     await prefetch.value
                     let content: SCShareableContent
                     if let prefetched = self.prefetchedContent { content = prefetched } else { content = try await Capture.shareableContent() }
-                    try await Task.sleep(nanoseconds: 30_000_000) // one frame for the overlay to leave the screen
-                    return try await Capture.selection(rect, content: content, preferences: self.preferences)
+                    let images = await frozen?.value ?? nil
+                    if images == nil { try await Task.sleep(nanoseconds: 30_000_000) } // one frame for the overlay to leave the screen
+                    return try await Capture.selection(rect, content: content, frozen: images, preferences: self.preferences)
                 }
             }
         }
+        if let frozen { Task { if let images = await frozen.value { session?.showFrozen(images) } } }
     }
 
     /// Runs a capture, then shows the thumbnail on `screen` (the display captured) or, for window
