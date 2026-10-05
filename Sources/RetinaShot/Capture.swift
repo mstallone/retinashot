@@ -65,7 +65,8 @@ enum Capture {
         guard let data = rep.representation(using: type, properties: properties) else { throw CaptureError.encode }
         let url = preferences.newFileURL()
         try data.write(to: url, options: .atomic)
-        tagAsScreenshot(url, kind: "selection", globalRect: rect)
+        // Off the main thread, and after the clipboard: Spotlight can take seconds to answer when it is busy.
+        DispatchQueue.global(qos: .utility).async { tagAsScreenshot(url, kind: "selection", globalRect: rect) }
         return publish(rep, at: url)
     }
 
