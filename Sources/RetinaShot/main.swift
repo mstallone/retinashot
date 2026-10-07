@@ -68,7 +68,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .separator,
             .action("Show Floating Thumbnail", isOn: preferences.showsThumbnail) { self.preferences.showsThumbnail.toggle() },
             .action("Open at Login", isOn: SMAppService.mainApp.status == .enabled) { self.toggleLogin() },
-            .action("Reveal Screenshots in Finder") { NSWorkspace.shared.activateFileViewerSelecting([self.preferences.directory]) },
         ]
         let header = granted ? nil : MenuHeader(title: appName, detail: .message("Needs Screen Recording permission."))
         return MenuSection(header: header, items: items, isActive: granted)
