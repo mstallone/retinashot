@@ -1,13 +1,13 @@
 {
-  "originHash" : "bcd4f654e6ee61533e602b30dadef2bafaac63457f171508930f917808cd802d",
+  "originHash" : "dd023093b6380ce88c964800d9b8f4e7f359a434c23fe3b31cd3ce725c437ae5",
   "pins" : [
     {
       "identity" : "menuhub",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mstallone/menuhub",
       "state" : {
-        "revision" : "677be4fc06af994ccc182c4f437bacecbfc5d25e",
-        "version" : "0.5.2"
+        "revision" : "6ce325e528137f4f0d7a1db7fba451db5bbe0f70",
+        "version" : "0.5.3"
       }
     },
     {
