@@ -31,6 +31,9 @@ selections come out 1x, window captures 2x.
 - A thumbnail rises into the bottom-right corner of the display that was captured. Click to open;
   drag into another app.
 - The panels are non-activating, so the app you were using keeps focus and its window shadows.
+- While you select it takes the mouse before any app sees it, so the app you were using can't change
+  the pointer, and a selection can start on a system alert (a crash report, a permission prompt)
+  that macOS draws above the panels.
 - With [MXSwipe](https://github.com/mstallone/mxswipe) also running, the two share one menu-bar icon
   and menu through [MenuHub](https://github.com/mstallone/menuhub), with one Check for Updates… for both.
 
@@ -51,21 +54,25 @@ Settings are read from Apple's `com.apple.screencapture` domain, so the Screensh
 menu keeps working: `location`, `name`, `include-date`, `type` (png, jpg, tiff), `disable-shadow`,
 and `show-thumbnail`.
 
-### Permission
+### Permissions
 
 Every process that reads screen pixels needs Screen Recording; Apple's own shortcuts are exempt only
-because they run inside a system process. RetinaShot asks once. If the switch is on but captures
-fail, the stored entry no longer matches the app's signature: Option-click the menu-bar icon and
-choose Reset Screen Recording Permission.
+because they run inside a system process. If the switch is on but captures fail, the stored entry no
+longer matches the app's signature: Option-click the menu-bar icon and choose Reset Screen Recording
+Permission.
+
+Accessibility lets RetinaShot take the mouse while you select. Without it, the app you were using
+would keep receiving mouse moves under the panels and flicker its own cursor over the crosshair.
+
+RetinaShot asks for each on launch, and its menu says which is missing.
 
 ### Private calls
 
 Two undocumented calls are used, isolated in `Sources/RetinaShot/Private.swift`:
 
-- `CGSSetConnectionProperty(…, "SetsCursorInBackground")` lets RetinaShot hide the pointer while
-  another app is active. The panel draws the crosshair instead, because the active app keeps setting
-  its own cursor as the mouse moves. If a future macOS ignores the call, the system pointer shows on
-  top of the drawn crosshair.
+- `CGSSetConnectionProperty(…, "SetsCursorInBackground")` lets RetinaShot set the pointer while
+  another app is active. If a future macOS ignores it, the crosshair stops appearing and nothing
+  else changes.
 - `MDItemSetAttribute` writes `kMDItemIsScreenCapture` and the selection rectangle, as the built-in
   tool does. If it fails, the file is still saved, just not indexed as a screenshot.
 
@@ -90,12 +97,12 @@ grant survives rebuilds, installs to /Applications, disables the built-in shortc
 It refuses to overwrite a release build unless given `--replace`.
 
     Sources/RetinaShot/main.swift        app lifecycle, menu, capture flow, permission dialog
-    Sources/RetinaShot/Selection.swift   overlay panels, rubber-band view, drawn crosshair with badge
+    Sources/RetinaShot/Selection.swift   overlay panels, rubber-band view, cursor with badge, mouse tap
     Sources/RetinaShot/Capture.swift     ScreenCaptureKit capture, crop, save, clipboard
     Sources/RetinaShot/Thumbnail.swift   floating preview
     Sources/RetinaShot/HotKeys.swift     Carbon global hot keys
     Sources/RetinaShot/Preferences.swift Apple's com.apple.screencapture settings
-    Sources/RetinaShot/Permission.swift  Screen Recording permission helpers
+    Sources/RetinaShot/Permission.swift  Screen Recording and Accessibility permission helpers
     Sources/RetinaShot/Private.swift     the two private calls above
     Resources/Info.plist                 bundle template; the version is stamped at build time
     Tools/make-icon.swift                renders AppIcon.icns

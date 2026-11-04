@@ -21,3 +21,15 @@ enum ScreenRecording {
         p.waitUntilExit()
     }
 }
+
+/// Accessibility permission, which a selection needs to take the mouse before other apps see it (see `MouseTap`).
+enum Accessibility {
+    static var isGranted: Bool { AXIsProcessTrusted() }
+
+    /// Adds the app to the Accessibility list, switched off, and opens that list. The prompt option is what
+    /// adds the entry; macOS 27 shows no prompt for it.
+    static func openSettings() {
+        AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+    }
+}

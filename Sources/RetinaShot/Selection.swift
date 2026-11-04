@@ -12,9 +12,11 @@ final class SelectionSession {
     private let completion: (Outcome) -> Void
     private var panels: [OverlayPanel] = []
     private var keys: [UInt32] = []
+    private var tap: MouseTap?
     private var finished = false
 
-    init(hotKeys: HotKeys, completion: @escaping (Outcome) -> Void) {
+    /// Fails when the mouse can't be tapped, which needs Accessibility.
+    init?(hotKeys: HotKeys, completion: @escaping (Outcome) -> Void) {
         self.hotKeys = hotKeys
         self.completion = completion
         for screen in NSScreen.screens {
@@ -24,14 +26,21 @@ final class SelectionSession {
             }
             panels.append(panel)
         }
+        guard let tap = MouseTap(handler: { [weak self] type, event in self?.route(type, event) }) else { return nil }
+        self.tap = tap
         panels.forEach { $0.orderFrontRegardless() }
-        setPointerHidden(true)
         keys = [
             hotKeys.register(kVK_Escape) { [weak self] pressed in if pressed { self?.finish(.cancelled) } },
             hotKeys.register(kVK_Space) { [weak self] pressed in self?.space(pressed) },
         ]
-        let mouse = NSEvent.mouseLocation
-        (panels.first { $0.frame.contains(mouse) } ?? panels.first)?.selectionView.refreshCursor()
+        // The pointer resets as the panels appear, so assert the crosshair over the first moments.
+        for delay in [0, 0.05, 0.2] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self = self, !self.finished else { return }
+                let mouse = NSEvent.mouseLocation
+                (self.panels.first { $0.frame.contains(mouse) } ?? self.panels.first)?.selectionView.refreshCursor()
+            }
+        }
     }
 
     /// Shows each display as it was frozen, under the selection.
@@ -53,10 +62,28 @@ final class SelectionSession {
         guard !finished else { return }
         finished = true
         keys.forEach(hotKeys.unregister)
+        tap?.stop()
         panels.forEach { $0.orderOut(nil) }
         panels.removeAll()
-        setPointerHidden(false)
+        setCursorInBackground(.arrow)
         completion(outcome)
+    }
+
+    /// Hands a mouse event from the tap to the panel being dragged on, or else the one under the pointer.
+    private func route(_ type: CGEventType, _ event: CGEvent) {
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        let screenPoint = NSPoint(x: event.location.x, y: primaryHeight - event.location.y)
+        guard let panel = panels.first(where: { $0.selectionView.isDragging }) ?? panels.first(where: { NSMouseInRect(screenPoint, $0.frame, false) })
+        else { return }
+        let view = panel.selectionView
+        let point = view.convert(panel.convertPoint(fromScreen: screenPoint), from: nil)
+        switch type {
+        case .mouseMoved: view.move(to: point)
+        case .leftMouseDown: view.press(at: point)
+        case .leftMouseDragged: view.drag(to: point, shift: event.flags.contains(.maskShift))
+        case .leftMouseUp: view.release(at: point)
+        default: break
+        }
     }
 
     /// AppKit screen coordinates (origin bottom-left, y up) → CoreGraphics global (origin top-left, y down).
@@ -76,9 +103,8 @@ final class OverlayPanel: NSPanel {
         super.init(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         level = .screenSaver
         isOpaque = false
-        backgroundColor = NSColor(white: 0, alpha: 0.01) // non-zero so every point of the panel receives clicks
+        backgroundColor = NSColor(white: 0, alpha: 0.01) // non-zero so a click the tap misses lands on the panel, not the app beneath
         hasShadow = false
-        acceptsMouseMovedEvents = true
         isReleasedWhenClosed = false
         animationBehavior = .none
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
@@ -108,53 +134,33 @@ final class SelectionView: NSView {
     private var cursor: NSPoint?
     private var axisLock: AxisLock?
     private var lastDrawn = NSRect.zero
-    private let pointer = CALayer()  // the crosshair and badge, drawn in place of the hidden system pointer
     private let badgeAttributes: [NSAttributedString.Key: Any] = [
         .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.white]
 
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        pointer.actions = ["position": NSNull(), "bounds": NSNull(), "contents": NSNull(), "hidden": NSNull()]
-        pointer.isHidden = true
-        layer?.addSublayer(pointer)
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
     override var isOpaque: Bool { false }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func updateTrackingAreas() {
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .cursorUpdate, .activeAlways, .inVisibleRect], owner: self))
-        super.updateTrackingAreas()
-    }
 
     // MARK: Mouse
 
-    override func cursorUpdate(with event: NSEvent) { track(event) }
-    override func mouseEntered(with event: NSEvent) { track(event) }
-    override func mouseExited(with event: NSEvent) { if !isDragging { cursor = nil; redraw() } }
-    override func mouseMoved(with event: NSEvent) { track(event) }
+    // Fed by the session's `MouseTap`; the panel itself never sees the mouse.
+    func move(to point: NSPoint) { cursor = point; redraw() }
 
-    override func mouseDown(with event: NSEvent) {
+    func press(at point: NSPoint) {
         isDragging = true
-        anchor = location(event)
-        track(event)
+        anchor = point
+        move(to: point)
     }
 
-    override func mouseDragged(with event: NSEvent) {
-        let point = location(event)
+    func drag(to point: NSPoint, shift: Bool) {
         if isMoving, let a = anchor, let c = cursor {
             anchor = NSPoint(x: a.x + point.x - c.x, y: a.y + point.y - c.y)
         }
         cursor = point
-        updateAxisLock(shift: event.modifierFlags.contains(.shift))
+        updateAxisLock(shift: shift)
         redraw()
     }
 
-    override func mouseUp(with event: NSEvent) {
-        track(event)
+    func release(at point: NSPoint) {
+        move(to: point)
         let rect = selection
         isDragging = false
         isMoving = false
@@ -170,9 +176,6 @@ final class SelectionView: NSView {
         cursor = convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
         redraw()
     }
-
-    private func location(_ event: NSEvent) -> NSPoint { convert(event.locationInWindow, from: nil) }
-    private func track(_ event: NSEvent) { cursor = location(event); redraw() }
 
     // MARK: Geometry
 
@@ -199,11 +202,11 @@ final class SelectionView: NSView {
 
     // MARK: Cursor
 
-    /// Draws the crosshair and badge as one layer at the pointer, which is hidden (see `setPointerHidden`).
-    /// Near an edge the badge flips to the other side. Idle it shows the pointer's coordinates (from the
-    /// display's top-left, like Apple); dragging, the size.
+    /// The badge rides inside the cursor image, so the window server moves it in lockstep with the
+    /// crosshair instead of the app redrawing it a frame behind. Near an edge it flips to the other side.
+    /// Idle it shows the pointer's coordinates (from the display's top-left, like Apple); dragging, the size.
     private func updateCursor() {
-        guard let c = cursor else { pointer.isHidden = true; return }
+        guard let c = cursor else { return }
         let base = NSCursor.crosshair
         let text = selection.map { "\(Int($0.width)) × \(Int($0.height))" } ?? "\(Int(c.x)), \(Int(bounds.height - c.y))"
         let textSize = (text as NSString).size(withAttributes: badgeAttributes)
@@ -212,7 +215,7 @@ final class SelectionView: NSView {
         let toRight = c.x + gap + badge.width <= bounds.maxX - 4
         let toBelow = c.y - gap - badge.height >= 4
 
-        // Laid out in flipped (top-left origin) coordinates around the hot spot.
+        // Laid out in flipped (top-left origin) coordinates around the hot spot, as cursor images are.
         let hot = base.hotSpot, baseSize = base.image.size
         let crosshairRect = NSRect(x: -hot.x, y: -hot.y, width: baseSize.width, height: baseSize.height)
         let badgeRect = NSRect(x: toRight ? gap : -gap - badge.width, y: toBelow ? gap : -gap - badge.height,
@@ -228,18 +231,12 @@ final class SelectionView: NSView {
             (text as NSString).draw(at: NSPoint(x: box.minX + 6, y: box.minY + 3), withAttributes: attributes)
             return true
         }
-        let scale = window?.backingScaleFactor ?? 2
-        pointer.contentsScale = scale
-        pointer.contents = image.layerContents(forContentsScale: scale)
-        // The view is not flipped, so the image's top-left corner is up and to the left of the hot spot.
-        let frame = NSRect(x: c.x + canvas.minX, y: c.y - canvas.maxY, width: canvas.width, height: canvas.height)
-        pointer.frame = backingAlignedRect(frame, options: .alignAllEdgesNearest)
-        pointer.isHidden = false
+        setCursorInBackground(NSCursor(image: image, hotSpot: NSPoint(x: -canvas.minX, y: -canvas.minY)))
     }
 
     // MARK: Drawing
 
-    /// Move the crosshair, and invalidate only what was drawn last time and what will be drawn now.
+    /// Update the cursor, and invalidate only what was drawn last time and what will be drawn now.
     private func redraw() {
         updateCursor()
         let next = selection?.insetBy(dx: -2, dy: -2) ?? .zero
@@ -255,5 +252,45 @@ final class SelectionView: NSView {
         NSBezierPath(rect: r.insetBy(dx: -0.5, dy: -0.5)).stroke()
         NSColor.white.setStroke()
         NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5)).stroke()
+    }
+}
+
+/// While a selection is on screen, takes the mouse before any app sees it. The app you were using stays
+/// active and would otherwise get every move and set its own cursor (arrow, pointing hand) over the
+/// crosshair, and windows the system keeps above the panels, such as crash and permission alerts, would get
+/// the clicks. Needs Accessibility.
+@MainActor
+final class MouseTap {
+    private var port: CFMachPort?
+    private let handler: (CGEventType, CGEvent) -> Void
+
+    init?(handler: @escaping (CGEventType, CGEvent) -> Void) {
+        self.handler = handler
+        let types: [CGEventType] = [.mouseMoved, .leftMouseDown, .leftMouseDragged, .leftMouseUp,
+                                    .rightMouseDown, .rightMouseDragged, .rightMouseUp,
+                                    .otherMouseDown, .otherMouseDragged, .otherMouseUp]
+        let mask = types.reduce(CGEventMask(0)) { $0 | 1 << $1.rawValue }
+        guard let port = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+                                           eventsOfInterest: mask, callback: { _, type, event, info in
+            let consumed = MainActor.assumeIsolated {
+                let tap = Unmanaged<MouseTap>.fromOpaque(info!).takeUnretainedValue()
+                if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                    if let port = tap.port { CGEvent.tapEnable(tap: port, enable: true) }
+                    return false
+                }
+                tap.handler(type, event)
+                return true
+            }
+            return consumed ? nil : Unmanaged.passUnretained(event)
+        }, userInfo: Unmanaged.passUnretained(self).toOpaque()) else { return nil }
+        self.port = port
+        CFRunLoopAddSource(CFRunLoopGetMain(), CFMachPortCreateRunLoopSource(nil, port, 0), .commonModes)
+    }
+
+    func stop() {
+        guard let port else { return }
+        CGEvent.tapEnable(tap: port, enable: false)
+        CFMachPortInvalidate(port)
+        self.port = nil
     }
 }

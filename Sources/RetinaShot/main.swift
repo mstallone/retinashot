@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         registerShortcuts()
         if SMAppService.mainApp.status == .notRegistered { try? SMAppService.mainApp.register() }
-        if !ScreenRecording.isGranted { explainPermission() }
+        if !ScreenRecording.isGranted { explainPermission() } else if !Accessibility.isGranted { explainAccessibility() }
     }
 
     private func registerShortcuts() {
@@ -51,14 +51,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Menu
 
     /// This app's part of the menu, read again whenever it may be shown, so every state it shows is current.
-    /// Without Screen Recording, the header says so and the fix comes first; with it, nothing is said.
+    /// Without a permission, the header says which and the fix comes first; with both, nothing is said.
     private var section: MenuSection {
-        let granted = ScreenRecording.isGranted
+        let canRecord = ScreenRecording.isGranted, canTap = Accessibility.isGranted
         var items: [MenuItem] = []
-        if !granted {
+        if !canRecord {
             items += [.action("Allow Screen Recording…") { self.explainPermission() },
                       .alternate("Reset Screen Recording Permission…") { self.resetPermission() },
                       .separator]
+        }
+        if !canTap {
+            items += [.action("Allow Accessibility…") { self.explainAccessibility() }, .separator]
         }
         items += [
             .action("Capture Selection", key: "4", modifiers: [.shift, .command]) { self.afterMenuCloses { self.beginSelection() } },
@@ -69,8 +72,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .action("Show Floating Thumbnail", isOn: preferences.showsThumbnail) { self.preferences.showsThumbnail.toggle() },
             .action("Open at Login", isOn: SMAppService.mainApp.status == .enabled) { self.toggleLogin() },
         ]
-        let header = granted ? nil : MenuHeader(title: appName, detail: .message("Needs Screen Recording permission."))
-        return MenuSection(header: header, items: items, isActive: granted)
+        let missing = [canRecord ? nil : "Screen Recording", canTap ? nil : "Accessibility"].compactMap { $0 }
+        let header = missing.isEmpty ? nil
+            : MenuHeader(title: appName, detail: .message("Needs \(missing.joined(separator: " and ")) permission."))
+        return MenuSection(header: header, items: items, isActive: missing.isEmpty)
     }
 
     private func toggleLogin() {
@@ -119,6 +124,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+        guard session != nil else {
+            prefetch.cancel()
+            frozen?.cancel()
+            explainAccessibility()
+            return
+        }
         if let frozen { Task { if let images = await frozen.value { session?.showFrozen(images) } } }
     }
 
@@ -166,6 +177,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .alertFirstButtonReturn: ScreenRecording.openSettings(); watchForPermission()
         case .alertSecondButtonReturn: resetPermission()
         default: watchForPermission()
+        }
+    }
+
+    private func explainAccessibility() {
+        hub?.update() // fades the icon, if the permission was just found missing
+        let alert = NSAlert()
+        alert.messageText = "\(appName) needs Accessibility permission"
+        alert.informativeText = """
+            While you select, \(appName) takes the mouse before other apps see it, so they can’t change the pointer or take the clicks.
+
+            Turn on \(appName) under Privacy & Security › Accessibility.
+
+            If the switch is already on, macOS is holding an entry from an earlier build: remove \(appName) from the list with –, then turn it on again.
+            """
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "Later")
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn { Accessibility.openSettings() }
+        watchForAccessibility()
+    }
+
+    /// Accessibility takes effect without a relaunch, so the icon only needs to brighten once it is on.
+    private func watchForAccessibility() {
+        permissionWatch?.invalidate()
+        permissionWatch = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] timer in
+            guard Accessibility.isGranted else { return }
+            timer.invalidate()
+            Task { @MainActor in self?.hub?.update() }
         }
     }
 
