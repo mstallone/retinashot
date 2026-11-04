@@ -13,6 +13,8 @@ final class SelectionSession {
     private var panels: [OverlayPanel] = []
     private var keys: [UInt32] = []
     private var finished = false
+    private var pointerHidden = false
+    private var observers: [NSObjectProtocol] = []
 
     init(hotKeys: HotKeys, completion: @escaping (Outcome) -> Void) {
         self.hotKeys = hotKeys
@@ -22,16 +24,24 @@ final class SelectionSession {
             panel.selectionView.onFinish = { [weak self, unowned panel] rect in
                 self?.finish(rect.map { .selected(Self.globalRect(panel.convertToScreen($0)), on: panel.display) } ?? .cancelled)
             }
+            panel.selectionView.onHoverChange = { [weak self] in self?.updatePointer() }
             panels.append(panel)
+            // The window server reports a panel under the pointer only once it is on screen.
+            observers.append(NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification, object: panel, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.panelUnderPointer()?.selectionView.refreshCursor()
+                    self.updatePointer()
+                }
+            })
         }
         panels.forEach { $0.orderFrontRegardless() }
-        setPointerHidden(true)
         keys = [
             hotKeys.register(kVK_Escape) { [weak self] pressed in if pressed { self?.finish(.cancelled) } },
             hotKeys.register(kVK_Space) { [weak self] pressed in self?.space(pressed) },
         ]
-        let mouse = NSEvent.mouseLocation
-        (panels.first { $0.frame.contains(mouse) } ?? panels.first)?.selectionView.refreshCursor()
     }
 
     /// Shows each display as it was frozen, under the selection.
@@ -53,10 +63,27 @@ final class SelectionSession {
         guard !finished else { return }
         finished = true
         keys.forEach(hotKeys.unregister)
+        observers.forEach(NotificationCenter.default.removeObserver)
         panels.forEach { $0.orderOut(nil) }
         panels.removeAll()
-        setPointerHidden(false)
+        updatePointer()
         completion(outcome)
+    }
+
+    /// The topmost window under the pointer, if it is one of the panels. The system draws some windows, such as
+    /// crash and permission alerts, above every app window, and clicks there go to them, not to a panel.
+    private func panelUnderPointer() -> OverlayPanel? {
+        let top = NSWindow.windowNumber(at: NSEvent.mouseLocation, belowWindowWithWindowNumber: 0)
+        return panels.first { $0.windowNumber == top }
+    }
+
+    /// Hides the pointer over the panels, where the crosshair is drawn, and shows it over anything above them.
+    private func updatePointer() {
+        let hide = panelUnderPointer() != nil
+        if hide != pointerHidden {
+            pointerHidden = hide
+            setPointerHidden(hide)
+        }
     }
 
     /// AppKit screen coordinates (origin bottom-left, y up) → CoreGraphics global (origin top-left, y down).
@@ -100,6 +127,7 @@ extension NSScreen {
 
 final class SelectionView: NSView {
     var onFinish: ((NSRect?) -> Void)?
+    var onHoverChange: (() -> Void)?
     private(set) var isDragging = false
     var isMoving = false
 
@@ -133,8 +161,8 @@ final class SelectionView: NSView {
     // MARK: Mouse
 
     override func cursorUpdate(with event: NSEvent) { track(event) }
-    override func mouseEntered(with event: NSEvent) { track(event) }
-    override func mouseExited(with event: NSEvent) { if !isDragging { cursor = nil; redraw() } }
+    override func mouseEntered(with event: NSEvent) { track(event); onHoverChange?() }
+    override func mouseExited(with event: NSEvent) { if !isDragging { cursor = nil; redraw(); onHoverChange?() } }
     override func mouseMoved(with event: NSEvent) { track(event) }
 
     override func mouseDown(with event: NSEvent) {
