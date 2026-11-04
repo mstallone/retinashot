@@ -8,10 +8,9 @@ import CoreServices
 @_silgen_name("CGSSetConnectionProperty")
 private func CGSSetConnectionProperty(_ cid: UInt32, _ owner: UInt32, _ key: CFString, _ value: CFTypeRef) -> Int32
 
-/// Hides the pointer while another app stays active, so the selection never steals focus (or window
-/// shadows) from whatever you are working in. That app still receives every mouse move and keeps setting
-/// its own cursor (arrow, pointing hand) under the overlay; any cursor set from here would only take turns
-/// with it and flicker. So the pointer is hidden and the overlay draws the crosshair itself.
+/// Hides or shows the pointer while another app stays active. That app still receives every mouse move and
+/// keeps setting its own cursor (arrow, pointing hand), so a crosshair set from here would flicker with it;
+/// the overlay hides the pointer and draws the crosshair instead.
 func setPointerHidden(_ hidden: Bool) {
     let cid = CGSMainConnectionID()
     _ = CGSSetConnectionProperty(cid, cid, "SetsCursorInBackground" as CFString, kCFBooleanTrue)

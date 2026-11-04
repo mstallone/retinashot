@@ -1,6 +1,6 @@
 name: Release
 
-# Tag a version to ship it: `git tag v1.2.0 && git push origin v1.2.0`.
+# Tag a version to ship it: `git tag -m "RetinaShot X.Y.Z" vX.Y.Z && git push origin vX.Y.Z`.
 # The tag is the version. One-time secret setup: Scripts/set-release-secrets.sh (see README).
 
 on:
