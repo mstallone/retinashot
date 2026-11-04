@@ -19,6 +19,8 @@ final class SelectionSession {
     init?(hotKeys: HotKeys, completion: @escaping (Outcome) -> Void) {
         self.hotKeys = hotKeys
         self.completion = completion
+        guard let tap = MouseTap(handler: { [weak self] type, event in self?.route(type, event) }) else { return nil }
+        self.tap = tap
         for screen in NSScreen.screens {
             let panel = OverlayPanel(screen: screen)
             panel.selectionView.onFinish = { [weak self, unowned panel] rect in
@@ -26,8 +28,6 @@ final class SelectionSession {
             }
             panels.append(panel)
         }
-        guard let tap = MouseTap(handler: { [weak self] type, event in self?.route(type, event) }) else { return nil }
-        self.tap = tap
         panels.forEach { $0.orderFrontRegardless() }
         keys = [
             hotKeys.register(kVK_Escape) { [weak self] pressed in if pressed { self?.finish(.cancelled) } },
@@ -141,7 +141,7 @@ final class SelectionView: NSView {
 
     // MARK: Mouse
 
-    // Fed by the session's `MouseTap`; the panel itself never sees the mouse.
+    // Fed by the session's `MouseTap`.
     func move(to point: NSPoint) { cursor = point; redraw() }
 
     func press(at point: NSPoint) {
@@ -258,7 +258,7 @@ final class SelectionView: NSView {
 /// While a selection is on screen, takes the mouse before any app sees it. The app you were using stays
 /// active and would otherwise get every move and set its own cursor (arrow, pointing hand) over the
 /// crosshair, and windows the system keeps above the panels, such as crash and permission alerts, would get
-/// the clicks. Needs Accessibility.
+/// the clicks. Other buttons are taken too, and ignored. Needs Accessibility.
 @MainActor
 final class MouseTap {
     private var port: CFMachPort?

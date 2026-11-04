@@ -31,9 +31,9 @@ selections come out 1x, window captures 2x.
 - A thumbnail rises into the bottom-right corner of the display that was captured. Click to open;
   drag into another app.
 - The panels are non-activating, so the app you were using keeps focus and its window shadows.
-- While you select it takes the mouse before any app sees it, so the app you were using can't change
-  the pointer, and a selection can start on a system alert (a crash report, a permission prompt)
-  that macOS draws above the panels.
+- While you select it handles the mouse before any app sees it, so the crosshair stays steady and on
+  top of everything, system alerts included (crash reports, permission prompts), and a selection can
+  start on one.
 - With [MXSwipe](https://github.com/mstallone/mxswipe) also running, the two share one menu-bar icon
   and menu through [MenuHub](https://github.com/mstallone/menuhub), with one Check for Updates… for both.
 

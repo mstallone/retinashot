@@ -74,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]
         let missing = [canRecord ? nil : "Screen Recording", canTap ? nil : "Accessibility"].compactMap { $0 }
         let header = missing.isEmpty ? nil
-            : MenuHeader(title: appName, detail: .message("Needs \(missing.joined(separator: " and ")) permission."))
+            : MenuHeader(title: appName, detail: .message("Needs \(missing.joined(separator: " and ")) permission\(missing.count > 1 ? "s" : "")."))
         return MenuSection(header: header, items: items, isActive: missing.isEmpty)
     }
 
@@ -174,9 +174,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Later")
         NSApp.activate(ignoringOtherApps: true)
         switch alert.runModal() {
-        case .alertFirstButtonReturn: ScreenRecording.openSettings(); watchForPermission()
+        case .alertFirstButtonReturn: ScreenRecording.openSettings(); watchForPermissions()
         case .alertSecondButtonReturn: resetPermission()
-        default: watchForPermission()
+        default: watchForPermissions()
         }
     }
 
@@ -185,35 +185,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.messageText = "\(appName) needs Accessibility permission"
         alert.informativeText = """
-            While you select, \(appName) takes the mouse before other apps see it, so they can’t change the pointer or take the clicks.
+            It keeps the crosshair steady and on top of everything while you select, including system alerts, by handling the mouse before other apps see it.
 
-            Turn on \(appName) under Privacy & Security › Accessibility.
+            Turn on \(appName) under Privacy & Security › Accessibility. It takes effect right away.
 
-            If the switch is already on, macOS is holding an entry from an earlier build: remove \(appName) from the list with –, then turn it on again.
+            If the switch is already on and this keeps appearing, remove \(appName) from the list with –, then choose Open System Settings again.
             """
         alert.addButton(withTitle: "Open System Settings")
         alert.addButton(withTitle: "Later")
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn { Accessibility.openSettings() }
-        watchForAccessibility()
+        watchForPermissions()
     }
 
-    /// Accessibility takes effect without a relaunch, so the icon only needs to brighten once it is on.
-    private func watchForAccessibility() {
+    /// Polls until the missing permissions are on. Screen Recording takes effect only after a relaunch;
+    /// Accessibility takes effect at once, so then the icon just brightens.
+    private func watchForPermissions() {
         permissionWatch?.invalidate()
-        permissionWatch = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] timer in
-            guard Accessibility.isGranted else { return }
-            timer.invalidate()
-            Task { @MainActor in self?.hub?.update() }
-        }
-    }
-
-    private func watchForPermission() {
-        permissionWatch?.invalidate()
+        let needsRelaunch = !ScreenRecording.isGranted
         permissionWatch = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] timer in
             guard ScreenRecording.isGranted else { return }
-            timer.invalidate()
-            Task { @MainActor in self?.relaunch() }
+            if needsRelaunch {
+                timer.invalidate()
+                Task { @MainActor in self?.relaunch() }
+            } else if Accessibility.isGranted {
+                timer.invalidate()
+                Task { @MainActor in self?.hub?.update() }
+            }
         }
     }
 
