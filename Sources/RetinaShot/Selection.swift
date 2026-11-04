@@ -25,18 +25,14 @@ final class SelectionSession {
             panels.append(panel)
         }
         panels.forEach { $0.orderFrontRegardless() }
+        setPointerHidden(true)
         keys = [
             hotKeys.register(kVK_Escape) { [weak self] pressed in if pressed { self?.finish(.cancelled) } },
             hotKeys.register(kVK_Space) { [weak self] pressed in self?.space(pressed) },
         ]
-        // The pointer resets as the panels appear, so assert the crosshair over the first moments.
-        for delay in [0, 0.05, 0.2] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                guard let self = self, !self.finished else { return }
-                let mouse = NSEvent.mouseLocation
-                (self.panels.first { $0.frame.contains(mouse) } ?? self.panels.first)?.selectionView.refreshCursor()
-            }
-        }
+        // Draw the crosshair where the pointer is now, without waiting for it to move.
+        let mouse = NSEvent.mouseLocation
+        (panels.first { $0.frame.contains(mouse) } ?? panels.first)?.selectionView.refreshCursor()
     }
 
     /// Shows each display as it was frozen, under the selection.
@@ -60,7 +56,7 @@ final class SelectionSession {
         keys.forEach(hotKeys.unregister)
         panels.forEach { $0.orderOut(nil) }
         panels.removeAll()
-        setCursorInBackground(.arrow)
+        setPointerHidden(false)
         completion(outcome)
     }
 
@@ -113,8 +109,19 @@ final class SelectionView: NSView {
     private var cursor: NSPoint?
     private var axisLock: AxisLock?
     private var lastDrawn = NSRect.zero
+    private let pointer = CALayer()  // the crosshair and badge, drawn in place of the hidden system pointer
     private let badgeAttributes: [NSAttributedString.Key: Any] = [
         .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.white]
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        pointer.actions = ["position": NSNull(), "bounds": NSNull(), "contents": NSNull(), "hidden": NSNull()]
+        pointer.isHidden = true
+        layer?.addSublayer(pointer)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override var isOpaque: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -193,11 +200,12 @@ final class SelectionView: NSView {
 
     // MARK: Cursor
 
-    /// The badge rides inside the cursor image, so the window server moves it in lockstep with the
-    /// crosshair instead of the app redrawing it a frame behind. Near an edge it flips to the other side.
-    /// Idle it shows the pointer's coordinates (from the display's top-left, like Apple); dragging, the size.
+    /// The system pointer is hidden during the selection (see `setPointerHidden`), so the crosshair
+    /// and its badge are one layer, moved with the pointer; the badge can never trail the crosshair. Near an
+    /// edge the badge flips to the other side. Idle it shows the pointer's coordinates (from the display's
+    /// top-left, like Apple); dragging, the size.
     private func updateCursor() {
-        guard let c = cursor else { return }
+        guard let c = cursor else { pointer.isHidden = true; return }
         let base = NSCursor.crosshair
         let text = selection.map { "\(Int($0.width)) × \(Int($0.height))" } ?? "\(Int(c.x)), \(Int(bounds.height - c.y))"
         let textSize = (text as NSString).size(withAttributes: badgeAttributes)
@@ -222,7 +230,13 @@ final class SelectionView: NSView {
             (text as NSString).draw(at: NSPoint(x: box.minX + 6, y: box.minY + 3), withAttributes: attributes)
             return true
         }
-        setCursorInBackground(NSCursor(image: image, hotSpot: NSPoint(x: -canvas.minX, y: -canvas.minY)))
+        let scale = window?.backingScaleFactor ?? 2
+        pointer.contentsScale = scale
+        pointer.contents = image.layerContents(forContentsScale: scale)
+        // The view is not flipped, so the image's top-left corner is up and to the left of the hot spot.
+        let frame = NSRect(x: c.x + canvas.minX, y: c.y - canvas.maxY, width: canvas.width, height: canvas.height)
+        pointer.frame = backingAlignedRect(frame, options: .alignAllEdgesNearest)
+        pointer.isHidden = false
     }
 
     // MARK: Drawing

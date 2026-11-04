@@ -21,8 +21,9 @@ exactly twice that on every capture; after it, selections are 1x and window capt
 ## What RetinaShot does
 
 - On Shift-Cmd-4 (or Ctrl-Shift-Cmd-4) it puts a transparent panel over every display and shows
-  a crosshair. The coordinates, and the selection size while dragging, are rendered into the cursor
-  image, so they move with the pointer instead of trailing it.
+  a crosshair. The app you were using stays active and keeps setting its own cursor as the mouse
+  moves, so the system pointer is hidden and the panel draws the crosshair, with the coordinates
+  (or the selection size while dragging) in one layer, so the badge never trails the crosshair.
 - On release it captures the whole display through ScreenCaptureKit at the display's native pixel
   size, window shadows included, and crops the selection out of that. The pixels match Apple's own
   full-screen capture of that display, and the PNG is tagged at the display's scale (144 dpi at 2x)
@@ -64,9 +65,10 @@ choose Reset Screen Recording Permission.
 
 Two undocumented calls are used, isolated in `Sources/RetinaShot/Private.swift`:
 
-- `CGSSetConnectionProperty(…, "SetsCursorInBackground")` lets a non-active app set the pointer.
-  Without it the crosshair would require activating RetinaShot, which deactivates your window.
-  If a future macOS ignores it, the crosshair stops appearing and nothing else changes.
+- `CGSSetConnectionProperty(…, "SetsCursorInBackground")` lets a non-active app hide the pointer.
+  Without it hiding would require activating RetinaShot, which deactivates your window.
+  If a future macOS ignores it, the system pointer shows on top of the drawn crosshair and
+  nothing else changes.
 - `MDItemSetAttribute` writes `kMDItemIsScreenCapture` and the selection rectangle, as the built-in
   tool does. If it fails, the file is still saved, just not indexed as a screenshot.
 
@@ -92,7 +94,7 @@ grant survives rebuilds, installs to /Applications, disables the built-in shortc
 It refuses to overwrite a release build unless given `--replace`.
 
     Sources/RetinaShot/main.swift        app lifecycle, menu, capture flow, permission dialog
-    Sources/RetinaShot/Selection.swift   overlay panels, rubber-band view, cursor with badge
+    Sources/RetinaShot/Selection.swift   overlay panels, rubber-band view, drawn crosshair with badge
     Sources/RetinaShot/Capture.swift     ScreenCaptureKit capture, crop, save, clipboard
     Sources/RetinaShot/Thumbnail.swift   floating preview
     Sources/RetinaShot/HotKeys.swift     Carbon global hot keys
