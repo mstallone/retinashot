@@ -30,7 +30,6 @@ final class SelectionSession {
             hotKeys.register(kVK_Escape) { [weak self] pressed in if pressed { self?.finish(.cancelled) } },
             hotKeys.register(kVK_Space) { [weak self] pressed in self?.space(pressed) },
         ]
-        // Draw the crosshair where the pointer is now, without waiting for it to move.
         let mouse = NSEvent.mouseLocation
         (panels.first { $0.frame.contains(mouse) } ?? panels.first)?.selectionView.refreshCursor()
     }
@@ -200,10 +199,9 @@ final class SelectionView: NSView {
 
     // MARK: Cursor
 
-    /// The system pointer is hidden during the selection (see `setPointerHidden`), so the crosshair
-    /// and its badge are one layer, moved with the pointer; the badge can never trail the crosshair. Near an
-    /// edge the badge flips to the other side. Idle it shows the pointer's coordinates (from the display's
-    /// top-left, like Apple); dragging, the size.
+    /// Draws the crosshair and badge as one layer at the pointer, which is hidden (see `setPointerHidden`).
+    /// Near an edge the badge flips to the other side. Idle it shows the pointer's coordinates (from the
+    /// display's top-left, like Apple); dragging, the size.
     private func updateCursor() {
         guard let c = cursor else { pointer.isHidden = true; return }
         let base = NSCursor.crosshair
@@ -214,7 +212,7 @@ final class SelectionView: NSView {
         let toRight = c.x + gap + badge.width <= bounds.maxX - 4
         let toBelow = c.y - gap - badge.height >= 4
 
-        // Laid out in flipped (top-left origin) coordinates around the hot spot, as cursor images are.
+        // Laid out in flipped (top-left origin) coordinates around the hot spot.
         let hot = base.hotSpot, baseSize = base.image.size
         let crosshairRect = NSRect(x: -hot.x, y: -hot.y, width: baseSize.width, height: baseSize.height)
         let badgeRect = NSRect(x: toRight ? gap : -gap - badge.width, y: toBelow ? gap : -gap - badge.height,
@@ -241,7 +239,7 @@ final class SelectionView: NSView {
 
     // MARK: Drawing
 
-    /// Update the cursor, and invalidate only what was drawn last time and what will be drawn now.
+    /// Move the crosshair, and invalidate only what was drawn last time and what will be drawn now.
     private func redraw() {
         updateCursor()
         let next = selection?.insetBy(dx: -2, dy: -2) ?? .zero

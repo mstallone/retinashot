@@ -10,9 +10,9 @@ factor, so on a Retina display a 600×400 pt selection is saved as a 600×400 px
 full-screen captures take a different path and are still 2x. The file is still tagged 144 dpi, so
 it also opens at half size.
 
-The pattern is easy to confirm: every screenshot carries its selection rectangle in Spotlight
-metadata (`kMDItemScreenCaptureGlobalRect`, in points). Before the update the pixel size was
-exactly twice that on every capture; after it, selections are 1x and window captures are 2x.
+To check any screenshot: its Spotlight metadata carries the captured rectangle in points
+(`kMDItemScreenCaptureGlobalRect`). On a Retina display the image should be twice that size;
+selections come out 1x, window captures 2x.
 
 <p align="center">
   <img src="assets/comparison.png" alt="The same mock window saved by the built-in tool at one pixel per point and by RetinaShot at two, with 4x loupes" width="800">
@@ -21,13 +21,10 @@ exactly twice that on every capture; after it, selections are 1x and window capt
 ## What RetinaShot does
 
 - On Shift-Cmd-4 (or Ctrl-Shift-Cmd-4) it puts a transparent panel over every display and shows
-  a crosshair. The app you were using stays active and keeps setting its own cursor as the mouse
-  moves, so the system pointer is hidden and the panel draws the crosshair, with the coordinates
-  (or the selection size while dragging) in one layer, so the badge never trails the crosshair.
-- On release it captures the whole display through ScreenCaptureKit at the display's native pixel
-  size, window shadows included, and crops the selection out of that. The pixels match Apple's own
-  full-screen capture of that display, and the PNG is tagged at the display's scale (144 dpi at 2x)
-  with the display's color profile, as the built-in tool's were before the update.
+  a crosshair with the pointer's coordinates, or the selection size while dragging.
+- On release it captures the whole display through ScreenCaptureKit at its native pixel size,
+  window shadows included, and crops the selection out of that: the same pixels as Apple's
+  full-screen capture. The file is tagged at the display's scale (144 dpi at 2x) with its color profile.
 - It saves to the Desktop, or to the folder set in the Screenshot app's Options, using Apple's file
   naming and a hidden extension, marks the file as a screenshot for Spotlight and Finder, and puts
   the image on the clipboard as PNG and TIFF.
@@ -43,7 +40,7 @@ exactly twice that on every capture; after it, selections are 1x and window capt
 | Space (held) | Move the selection |
 | Shift | Lock width or height |
 | Option | Resize from the center |
-| Space (before dragging) | Switch to Apple's window picker; its window path is unaffected |
+| Space (before dragging) | Switch to Apple's window picker, whose captures are full resolution |
 | Escape | Cancel |
 
 <p align="center">
@@ -65,10 +62,10 @@ choose Reset Screen Recording Permission.
 
 Two undocumented calls are used, isolated in `Sources/RetinaShot/Private.swift`:
 
-- `CGSSetConnectionProperty(…, "SetsCursorInBackground")` lets a non-active app hide the pointer.
-  Without it hiding would require activating RetinaShot, which deactivates your window.
-  If a future macOS ignores it, the system pointer shows on top of the drawn crosshair and
-  nothing else changes.
+- `CGSSetConnectionProperty(…, "SetsCursorInBackground")` lets RetinaShot hide the pointer while
+  another app is active. The panel draws the crosshair instead, because the active app keeps setting
+  its own cursor as the mouse moves. If a future macOS ignores the call, the system pointer shows on
+  top of the drawn crosshair.
 - `MDItemSetAttribute` writes `kMDItemIsScreenCapture` and the selection rectangle, as the built-in
   tool does. If it fails, the file is still saved, just not indexed as a screenshot.
 
@@ -76,8 +73,7 @@ Two undocumented calls are used, isolated in `Sources/RetinaShot/Private.swift`:
 
 Download `RetinaShot-<version>-macOS.zip` from the [latest release](https://github.com/mstallone/retinashot/releases/latest),
 unzip, and move RetinaShot.app to /Applications. It is a universal binary, signed with Developer ID,
-notarized, and requires macOS 27. From 1.5.0 it updates itself through [Sparkle](https://sparkle-project.org);
-1.4.0 and earlier are replaced by hand.
+notarized, and requires macOS 27. It updates itself through [Sparkle](https://sparkle-project.org).
 
 Then turn off the built-in shortcut so RetinaShot can take it: run `Scripts/install-shortcuts.sh`
 from a checkout, or untick "Save picture of selected area as a file" and its clipboard variant under
@@ -118,7 +114,7 @@ The tag is the version. Pushing `vMAJOR.MINOR.PATCH` runs the Release workflow: 
 Developer ID signature with hardened runtime and timestamp, notarization, stapling, Gatekeeper
 check, then a GitHub Release with the zip, its SHA-256, and a signed Sparkle `appcast.xml`.
 
-    git tag v1.2.2 && git push origin v1.2.2
+    git tag -m "RetinaShot X.Y.Z" vX.Y.Z && git push origin vX.Y.Z
 
 Secrets, set once with `Scripts/set-release-secrets.sh <issuer-id>` (it exports the Developer ID
 identity and the Sparkle key from the login keychain, and reads the App Store Connect key from
