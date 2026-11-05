@@ -63,6 +63,7 @@ final class SelectionSession {
         finished = true
         keys.forEach(hotKeys.unregister)
         tap?.stop()
+        panels.forEach { $0.selectionView.stopCursorUpdates() }
         panels.forEach { $0.orderOut(nil) }
         panels.removeAll()
         setCursorInBackground(.arrow)
@@ -133,9 +134,30 @@ final class SelectionView: NSView {
     private var anchor: NSPoint?   // fixed corner, or the center while Option is held
     private var cursor: NSPoint?
     private var axisLock: AxisLock?
-    private var lastDrawn = NSRect.zero
+    // The selection is drawn by two layers, so it moves and resizes without anything being redrawn.
+    private let fill = CALayer()     // translucent, with a white edge
+    private let outline = CALayer()  // dark, just outside the white edge, so it shows on light backgrounds
+    private var cursorLink: CADisplayLink?
+    private var cursorIsStale = false
     private let badgeAttributes: [NSAttributedString.Key: Any] = [
         .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.white]
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        fill.backgroundColor = NSColor(white: 1, alpha: 0.10).cgColor
+        fill.borderColor = NSColor.white.cgColor
+        fill.borderWidth = 1
+        outline.borderColor = NSColor(white: 0, alpha: 0.55).cgColor
+        outline.borderWidth = 1
+        for sublayer in [outline, fill] {
+            sublayer.actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull()]
+            sublayer.isHidden = true
+            layer?.addSublayer(sublayer)
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override var isOpaque: Bool { false }
 
@@ -202,6 +224,29 @@ final class SelectionView: NSView {
 
     // MARK: Cursor
 
+    /// Mice report far more often than the display refreshes, and every new cursor image is a round trip to
+    /// the window server, so the cursor is rebuilt at most once a frame.
+    private func setCursorNeedsUpdate() {
+        cursorIsStale = true
+        if cursorLink == nil {
+            cursorLink = displayLink(target: self, selector: #selector(cursorLinkFired))
+            cursorLink?.add(to: .main, forMode: .common)
+        }
+        cursorLink?.isPaused = false
+    }
+
+    @objc private func cursorLinkFired() {
+        guard cursorIsStale else { cursorLink?.isPaused = true; return }
+        cursorIsStale = false
+        // After the pointer crosses to another display, that display's view owns the cursor.
+        if isDragging || window.map({ NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) == true { updateCursor() }
+    }
+
+    func stopCursorUpdates() {
+        cursorLink?.invalidate()
+        cursorLink = nil
+    }
+
     /// The badge rides inside the cursor image, so the window server moves it in lockstep with the
     /// crosshair instead of the app redrawing it a frame behind. Near an edge it flips to the other side.
     /// Idle it shows the pointer's coordinates (from the display's top-left, like Apple); dragging, the size.
@@ -221,37 +266,38 @@ final class SelectionView: NSView {
         let badgeRect = NSRect(x: toRight ? gap : -gap - badge.width, y: toBelow ? gap : -gap - badge.height,
                                width: badge.width, height: badge.height)
         let canvas = crosshairRect.union(badgeRect)
-        let attributes = badgeAttributes
-        let image = NSImage(size: canvas.size, flipped: true) { _ in
-            let shift = CGAffineTransform(translationX: -canvas.minX, y: -canvas.minY)
-            base.image.draw(in: crosshairRect.applying(shift), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-            let box = badgeRect.applying(shift)
-            NSColor(white: 0.1, alpha: 0.85).setFill()
-            NSBezierPath(roundedRect: box, xRadius: 5, yRadius: 5).fill()
-            (text as NSString).draw(at: NSPoint(x: box.minX + 6, y: box.minY + 3), withAttributes: attributes)
-            return true
-        }
-        setCursorInBackground(NSCursor(image: image, hotSpot: NSPoint(x: -canvas.minX, y: -canvas.minY)))
+
+        // Drawn straight into an 8-bit sRGB bitmap at the display's scale. A lazily drawn NSImage would be
+        // rasterized again, through floating-point color conversion, every time the cursor is set.
+        let scale = window?.backingScaleFactor ?? 2
+        guard let context = CGContext(data: nil, width: Int(canvas.width * scale), height: Int(canvas.height * scale),
+                                      bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+        else { return }
+        context.translateBy(x: -canvas.minX * scale, y: canvas.maxY * scale)
+        context.scaleBy(x: scale, y: -scale)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+        base.image.draw(in: crosshairRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        NSColor(white: 0.1, alpha: 0.85).setFill()
+        NSBezierPath(roundedRect: badgeRect, xRadius: 5, yRadius: 5).fill()
+        (text as NSString).draw(at: NSPoint(x: badgeRect.minX + 6, y: badgeRect.minY + 3), withAttributes: badgeAttributes)
+        NSGraphicsContext.restoreGraphicsState()
+        guard let image = context.makeImage() else { return }
+        setCursorInBackground(NSCursor(image: NSImage(cgImage: image, size: canvas.size), hotSpot: NSPoint(x: -canvas.minX, y: -canvas.minY)))
     }
 
     // MARK: Drawing
 
-    /// Update the cursor, and invalidate only what was drawn last time and what will be drawn now.
+    /// Moves the selection layers and asks for a new cursor.
     private func redraw() {
-        updateCursor()
-        let next = selection?.insetBy(dx: -2, dy: -2) ?? .zero
-        setNeedsDisplay(lastDrawn.union(next))
-        lastDrawn = next
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let r = selection else { return }
-        NSColor(white: 1, alpha: 0.10).setFill()
-        r.fill()
-        NSColor(white: 0, alpha: 0.55).setStroke()
-        NSBezierPath(rect: r.insetBy(dx: -0.5, dy: -0.5)).stroke()
-        NSColor.white.setStroke()
-        NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5)).stroke()
+        setCursorNeedsUpdate()
+        let r = selection
+        fill.isHidden = r == nil
+        outline.isHidden = r == nil
+        guard let r else { return }
+        fill.frame = r
+        outline.frame = r.insetBy(dx: -1, dy: -1)
     }
 }
 
